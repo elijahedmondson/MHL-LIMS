@@ -21,3 +21,7 @@ Thumbs.db
 .DS_Store
 ~$*
 *.log
+
+# Migration: connection settings and snapshots of legacy schemas/counts stay local
+migration/config/sources.psd1
+migration/out/
