@@ -1,0 +1,68 @@
+@page "/admin/price-lists"
+@using MhlLims.Domain.Billing
+@using MhlLims.Infrastructure.Data
+@using Microsoft.EntityFrameworkCore
+@inject LimsDbContext Db
+
+<PageTitle>Price lists · MHL LIMS</PageTitle>
+
+<h1>Price lists</h1>
+<p class="hint">A price list is a draft until a billing administrator approves it. Approved lists are frozen; a new year needs a new list.</p>
+
+@if (lists is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table class="grid">
+        <thead><tr><th>Name</th><th>Status</th><th>Effective</th><th class="num">Codes</th><th class="num">Not priced</th><th>Source</th></tr></thead>
+        <tbody>
+            @foreach (var p in lists)
+            {
+                <tr>
+                    <td><a href="@($"admin/price-lists?show={p.Id}")">@p.Name</a></td>
+                    <td><span class="badge">@p.Status</span></td>
+                    <td>@p.EffectiveFrom.ToString("yyyy-MM-dd") – @(p.EffectiveTo?.ToString("yyyy-MM-dd") ?? "open")</td>
+                    <td class="num">@p.Items.Count</td>
+                    <td class="num @(p.Items.Any(i => i.UnitPrice is null) ? "warn" : "")">@p.Items.Count(i => i.UnitPrice is null)</td>
+                    <td class="muted">@p.SourceFile</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (selected is not null)
+    {
+        <h2>@selected.Name items</h2>
+        <table class="grid">
+            <thead><tr><th>Code</th><th>Description</th><th>Unit</th><th class="num">Price</th></tr></thead>
+            <tbody>
+                @foreach (var item in selected.Items.OrderBy(i => i.ChargeCode))
+                {
+                    var code = codes.GetValueOrDefault(item.ChargeCode);
+                    <tr>
+                        <td>@item.ChargeCode</td>
+                        <td>@code?.Description</td>
+                        <td>@code?.UnitOfMeasure</td>
+                        <td class="num">@(item.UnitPrice?.ToString("C") ?? "not priced")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "show")] public int? Show { get; set; }
+    private List<PriceList>? lists;
+    private PriceList? selected;
+    private Dictionary<string, ChargeCode> codes = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        lists = await Db.PriceLists.AsNoTracking().Include(p => p.Items).OrderByDescending(p => p.EffectiveFrom).ToListAsync();
+        codes = await Db.ChargeCodes.AsNoTracking().ToDictionaryAsync(c => c.Code);
+        selected = Show is null ? null : lists.FirstOrDefault(p => p.Id == Show);
+    }
+}

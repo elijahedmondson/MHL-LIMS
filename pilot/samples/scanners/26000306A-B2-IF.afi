@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImageList>
+  <Image>
+    <Path>26000306A-B2-IF_DAPI.svs</Path>
+    <ChannelName>DAPI</ChannelName>
+  </Image>
+  <Image>
+    <Path>26000306A-B2-IF_FITC.svs</Path>
+    <ChannelName>GFP</ChannelName>
+  </Image>
+  <Image>
+    <Path>26000306A-B2-IF_TRITC.svs</Path>
+    <ChannelName>Ki-67</ChannelName>
+  </Image>
+</ImageList>

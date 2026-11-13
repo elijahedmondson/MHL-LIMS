@@ -1,0 +1,8 @@
+Animal ID,Group,Sex,Date of birth,Notes
+A-01,Ctrl,M,2026-06-01,
+A-02,Ctrl,M,06/01/2026,
+A-02,Low,M,2026-06-01,Same ID as the line above
+A-04,Low,X,2026-06-01,"Sex is not F, M or U"
+,High,F,2026-06-01,No animal ID
+A-06,High,F,2030-01-01,Born in the future
+A-07,High,F,13/45/2026,Not a date

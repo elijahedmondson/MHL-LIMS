@@ -1,0 +1,75 @@
+@page "/"
+@rendermode InteractiveServer
+@inject LookupService Lookup
+
+<PageTitle>Lookup · MHL LIMS</PageTitle>
+
+<h1>Find a request</h1>
+<p class="hint">Search by request number, PHL#, ZAP#, NAS# or investigator last name.</p>
+
+<form class="search" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+    <input @bind="term" placeholder="e.g. 27000123A, ZAP1042, NAS-27-0456, Rivera" aria-label="Search term" />
+    <button type="submit" disabled="@busy">Search</button>
+</form>
+
+@if (error is not null)
+{
+    <p class="error">@error</p>
+}
+
+@if (hits is not null)
+{
+    if (hits.Count == 0)
+    {
+        <p>No matches for "@lastTerm".</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr><th>Request</th><th>Investigator</th><th>NAS#</th><th>ZAP#</th><th>Received</th><th>Status</th><th>Matched on</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var h in hits)
+                {
+                    <tr>
+                        <td><a href="@($"requests/{h.RequestId}")">@h.RequestNumber</a></td>
+                        <td>@h.Investigator</td>
+                        <td>@h.NasNumber</td>
+                        <td>@h.ZapNumber</td>
+                        <td>@h.ReceivedDate.ToString("yyyy-MM-dd")</td>
+                        <td>@h.Status</td>
+                        <td class="muted">@h.MatchedOn</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private string term = string.Empty;
+    private string lastTerm = string.Empty;
+    private IReadOnlyList<LookupHit>? hits;
+    private string? error;
+    private bool busy;
+
+    private async Task SearchAsync()
+    {
+        busy = true;
+        error = null;
+        lastTerm = term;
+        try
+        {
+            hits = await Lookup.SearchAsync(term);
+        }
+        catch (Exception ex)
+        {
+            error = "The search failed: " + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

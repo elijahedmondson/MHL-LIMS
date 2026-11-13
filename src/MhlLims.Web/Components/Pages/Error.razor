@@ -1,0 +1,14 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Error · MHL LIMS</PageTitle>
+<h1>Something went wrong</h1>
+<p>The error has been logged. If it keeps happening, contact the LIMS team and quote this reference:</p>
+<p><code>@requestId</code></p>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? requestId;
+
+    protected override void OnInitialized() => requestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

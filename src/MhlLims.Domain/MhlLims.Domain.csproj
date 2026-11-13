@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Business rules only. No references to EF Core, ASP.NET or any I/O, so every
+       rule can be unit tested without a database. -->
+  <PropertyGroup>
+    <RootNamespace>MhlLims.Domain</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="MhlLims.Domain.Tests" />
+  </ItemGroup>
+</Project>

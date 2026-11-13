@@ -1,0 +1,32 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 09:40:12 =~=~=~=~=~=~=~=~=~=~=~=
+            VETSCAN VS2
+   Comprehensive Diagnostic Profile
+05 Nov 2026 09:40 AM
+Sample Type:    Other
+Patient ID: 26000327A
+Rotor Lot Number: 6123AB4
+Serial Number:    0000V40123
+
+ALB     3.1   g/dL   2.5-4.8
+ALP      92   U/L    62-209
+ALT      41   U/L    28-132
+AMY     402   U/L    211-563
+TBIL    0.3   mg/dL  0.1-0.9
+BUN      22   mg/dL  18-29
+CA      9.8   mg/dL  8.8-11.5
+PHOS    7.9   mg/dL  6.1-10.1
+CRE     0.3   mg/dL  0.2-0.8
+GLU     182   mg/dL  90-192
+NA+     151   mmol/L 140-160
+K+      6.8 H mmol/L 4.7-6.4
+TP      5.4   g/dL   3.6-6.6
+GLOB    2.3   g/dL   1.0-3.2
+
+QC  OK
+HEM 0     LIP 0     ICT 0+
+
+
+
+Instrument QC:        OK
+Chemistry QC:         OK
+Printed by VS2 software 3.1.35

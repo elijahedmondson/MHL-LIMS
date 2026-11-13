@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHL LIMS pilot</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#/">MHL LIMS</a>
+  <nav class="tabs" aria-label="Main">
+    <a href="#/" data-tab="lookup">Look up</a>
+    <a href="#/estimates" data-tab="estimates" title="Cost estimates for possible new projects">Estimates</a>
+    <a href="#/new" data-tab="new">New request</a>
+    <a href="#/necropsy" data-tab="necropsy">Necropsy</a>
+    <a href="#/bloodwork" data-tab="bloodwork">Bloodwork</a>
+    <a href="#/pathology" data-tab="pathology">Pathology</a>
+    <a href="#/molecular" data-tab="molecular" title="IHC, Xenium, the assay catalog and the dilution calculator">Molecular</a>
+    <a href="#/wsi" data-tab="wsi" title="Whole-slide imaging">WSI</a>
+    <a href="#/billing" data-tab="billing">Billing</a>
+  </nav>
+  <div class="bar-right">
+    <span><strong>Pilot</strong><span class="long"> with test data</span></span>
+    <button class="who" id="who" type="button" title="Your initials and pilot settings">Set initials</button>
+  </div>
+</header>
+<main id="app" tabindex="-1"><p class="muted">Loading…</p></main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

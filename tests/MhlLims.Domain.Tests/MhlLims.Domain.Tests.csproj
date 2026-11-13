@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MhlLims.Domain.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MhlLims.Domain\MhlLims.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The real CY2027 price list, converted from the billing worksheet. -->
+    <None Include="..\..\src\SeedData\price-list-CY2027.json" Link="TestData\price-list-CY2027.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Inputs and expected outputs from the pilot's JavaScript rules (tools/rules-reference/make_golden.mjs). -->
+    <None Include="..\..\tools\rules-reference\golden\ihc-pathology-golden.json" Link="TestData\ihc-pathology-golden.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

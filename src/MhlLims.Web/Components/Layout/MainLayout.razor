@@ -1,0 +1,19 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <header class="topbar">
+        <a href="/" class="brand">MHL LIMS</a>
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">Lookup</NavLink>
+            <NavLink href="/admin/price-lists">Price lists</NavLink>
+        </nav>
+        <span class="user">
+            <AuthorizeView>
+                <Authorized>@context.User.Identity?.Name</Authorized>
+            </AuthorizeView>
+        </span>
+    </header>
+    <main class="content">
+        @Body
+    </main>
+</div>

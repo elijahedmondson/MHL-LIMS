@@ -1,0 +1,23 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+appsettings.*.local.json
+*.local.json
+node_modules/
+pilot/data/
+
+# Local-only material (legacy source, internal documents) - never publish
+_local-only/
+
+# Pilot working data (may contain real lab records)
+pilot/data/
+
+# OS / editor / R clutter
+.Rhistory
+Thumbs.db
+.DS_Store
+~$*
+*.log

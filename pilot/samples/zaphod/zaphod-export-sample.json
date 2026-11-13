@@ -1,0 +1,803 @@
+{
+ "format": "zaphod-reference-export",
+ "version": 1,
+ "exportedAt": "2026-11-05T14:02:11",
+ "database": "Zaphod (sample)",
+ "necropsyProtocols": [
+  {
+   "ProtocolID": 41,
+   "ProtocolName": "Sample - mouse full necropsy",
+   "Description": "Twenty-organ panel",
+   "ProtocolDate": "2019-03-14T00:00:00",
+   "Approved": true,
+   "Obsolete": false,
+   "ApprovedBy": "XX",
+   "DateApproved": "2019-03-20T00:00:00",
+   "GeneralInstructions": "Fictional sample protocol for trying the import; not an MHL protocol.",
+   "WeighAnimal": true,
+   "steps": [
+    {
+     "Sequence": 1,
+     "Organ": "Brain",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": "Weigh whole brain before fixation"
+    },
+    {
+     "Sequence": 2,
+     "Organ": "Pituitary gland",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 3,
+     "Organ": "Eyes",
+     "Fixative": "Davidson's",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Both eyes in Davidson's for 24 h"
+    },
+    {
+     "Sequence": 4,
+     "Organ": "Thymus",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 5,
+     "Organ": "Heart",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 6,
+     "Organ": "Lungs",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": "Inflate with formalin at 20 cm H2O"
+    },
+    {
+     "Sequence": 7,
+     "Organ": "Liver",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": "Snap freeze",
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": "Snap-freeze a piece of the left lateral lobe"
+    },
+    {
+     "Sequence": 8,
+     "Organ": "Spleen",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 9,
+     "Organ": "Kidneys",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 10,
+     "Organ": "Adrenal glands",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 11,
+     "Organ": "Stomach",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Open along the greater curvature"
+    },
+    {
+     "Sequence": 12,
+     "Organ": "Small intestine",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Swiss roll"
+    },
+    {
+     "Sequence": 13,
+     "Organ": "Large intestine",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Swiss roll"
+    },
+    {
+     "Sequence": 14,
+     "Organ": "Testes",
+     "Fixative": "Modified Davidson's",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 15,
+     "Organ": "Ovaries",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 16,
+     "Organ": "Uterus",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 17,
+     "Organ": "Urinary bladder",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Inflate with formalin"
+    },
+    {
+     "Sequence": 18,
+     "Organ": "Skin",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": "Ventral abdominal skin"
+    },
+    {
+     "Sequence": 19,
+     "Organ": "Femur and bone marrow",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 20,
+     "Organ": "Mammary gland",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    }
+   ]
+  },
+  {
+   "ProtocolID": 42,
+   "ProtocolName": "Sample - lung tumor model",
+   "Description": "Targeted lung tumor panel",
+   "ProtocolDate": "2019-03-14T00:00:00",
+   "Approved": true,
+   "Obsolete": false,
+   "ApprovedBy": "XX",
+   "DateApproved": "2019-03-20T00:00:00",
+   "GeneralInstructions": "Fictional sample protocol for trying the import; not an MHL protocol.",
+   "WeighAnimal": true,
+   "steps": [
+    {
+     "Sequence": 1,
+     "Organ": "Lungs",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": true,
+     "Description": "Inflate; measure the largest tumor"
+    },
+    {
+     "Sequence": 2,
+     "Organ": "Tumor",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": "Snap freeze",
+     "WeighOrgan": true,
+     "MeasureOrgan": true,
+     "Description": "Half fixed, half snap-frozen"
+    },
+    {
+     "Sequence": 3,
+     "Organ": "Liver",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 4,
+     "Organ": "Spleen",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    },
+    {
+     "Sequence": 5,
+     "Organ": "Lymph node, mediastinal",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": false,
+     "MeasureOrgan": false,
+     "Description": ""
+    }
+   ]
+  },
+  {
+   "ProtocolID": 17,
+   "ProtocolName": "Sample - old panel",
+   "Description": "Replaced in 2019",
+   "ProtocolDate": "2019-03-14T00:00:00",
+   "Approved": true,
+   "Obsolete": true,
+   "ApprovedBy": "XX",
+   "DateApproved": "2019-03-20T00:00:00",
+   "GeneralInstructions": "Fictional sample protocol for trying the import; not an MHL protocol.",
+   "WeighAnimal": false,
+   "steps": [
+    {
+     "Sequence": 1,
+     "Organ": "Liver",
+     "Fixative": "10% Neutral Buffered Formalin",
+     "Freeze": null,
+     "WeighOrgan": true,
+     "MeasureOrgan": false,
+     "Description": ""
+    }
+   ]
+  }
+ ],
+ "trimProtocols": [
+  {
+   "ProtocolID": 31,
+   "ProtocolName": "Sample - mouse full trim",
+   "Description": "Ten blocks",
+   "ProtocolDate": "2019-03-14T00:00:00",
+   "Approved": true,
+   "Obsolete": false,
+   "ApprovedBy": "XX",
+   "DateApproved": "2019-03-20T00:00:00",
+   "GeneralInstructions": "Fictional sample protocol for trying the import; not an MHL protocol.",
+   "organs": [
+    {
+     "BlockNbr": "1",
+     "Organ": "Brain",
+     "Sex": "N",
+     "Description": "Three coronal sections"
+    },
+    {
+     "BlockNbr": "1",
+     "Organ": "Pituitary gland",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "2",
+     "Organ": "Thymus",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "2",
+     "Organ": "Heart",
+     "Sex": "N",
+     "Description": "Longitudinal"
+    },
+    {
+     "BlockNbr": "2",
+     "Organ": "Lungs",
+     "Sex": "N",
+     "Description": "All lobes"
+    },
+    {
+     "BlockNbr": "3",
+     "Organ": "Liver",
+     "Sex": "N",
+     "Description": "Left lateral and median lobes"
+    },
+    {
+     "BlockNbr": "4",
+     "Organ": "Spleen",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "4",
+     "Organ": "Kidneys",
+     "Sex": "N",
+     "Description": "Left longitudinal, right transverse"
+    },
+    {
+     "BlockNbr": "5",
+     "Organ": "Adrenal glands",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "6",
+     "Organ": "Stomach",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "6",
+     "Organ": "Small intestine",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "6",
+     "Organ": "Large intestine",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "7",
+     "Organ": "Testes",
+     "Sex": "M",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "7",
+     "Organ": "Ovaries",
+     "Sex": "F",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "7",
+     "Organ": "Uterus",
+     "Sex": "F",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "8",
+     "Organ": "Urinary bladder",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "8",
+     "Organ": "Skin",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "8",
+     "Organ": "Mammary gland",
+     "Sex": "F",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "9",
+     "Organ": "Femur and bone marrow",
+     "Sex": "N",
+     "Description": "Decalcify"
+    },
+    {
+     "BlockNbr": "10",
+     "Organ": "Eyes",
+     "Sex": "N",
+     "Description": ""
+    }
+   ]
+  },
+  {
+   "ProtocolID": 32,
+   "ProtocolName": "Sample - lung tumor trim",
+   "Description": "Four blocks",
+   "ProtocolDate": "2019-03-14T00:00:00",
+   "Approved": true,
+   "Obsolete": false,
+   "ApprovedBy": "XX",
+   "DateApproved": "2019-03-20T00:00:00",
+   "GeneralInstructions": "Fictional sample protocol for trying the import; not an MHL protocol.",
+   "organs": [
+    {
+     "BlockNbr": "1",
+     "Organ": "Lungs",
+     "Sex": "N",
+     "Description": "All lobes"
+    },
+    {
+     "BlockNbr": "2",
+     "Organ": "Tumor",
+     "Sex": "N",
+     "Description": "Largest cross-section"
+    },
+    {
+     "BlockNbr": "3",
+     "Organ": "Liver",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "3",
+     "Organ": "Spleen",
+     "Sex": "N",
+     "Description": ""
+    },
+    {
+     "BlockNbr": "4",
+     "Organ": "Lymph node, mediastinal",
+     "Sex": "N",
+     "Description": ""
+    }
+   ]
+  }
+ ],
+ "studies": [
+  {
+   "ZAPNbr": "ZAP2215",
+   "StudyTitle": "Tumor latency in KrasG12D; Trp53fl/fl mice",
+   "NecropsyProtocolID": 42,
+   "TrimProtocolID": 32,
+   "Obsolete": false
+  },
+  {
+   "ZAPNbr": "ZAP1999",
+   "StudyTitle": "An older study not in the pilot",
+   "NecropsyProtocolID": 41,
+   "TrimProtocolID": 31,
+   "Obsolete": true
+  }
+ ],
+ "dictionaries": {
+  "organs": [
+   {
+    "OrganID": 1,
+    "Organ": "Brain",
+    "PairedOrgan": false,
+    "Sex": "N"
+   },
+   {
+    "OrganID": 2,
+    "Organ": "Lungs",
+    "PairedOrgan": true,
+    "Sex": "N"
+   },
+   {
+    "OrganID": 3,
+    "Organ": "Liver",
+    "PairedOrgan": false,
+    "Sex": "N"
+   },
+   {
+    "OrganID": 4,
+    "Organ": "Testes",
+    "PairedOrgan": true,
+    "Sex": "M"
+   },
+   {
+    "OrganID": 5,
+    "Organ": "Ovaries",
+    "PairedOrgan": true,
+    "Sex": "F"
+   },
+   {
+    "OrganID": 6,
+    "Organ": "Lymph node, mediastinal",
+    "PairedOrgan": false,
+    "Sex": "N"
+   },
+   {
+    "OrganID": 7,
+    "Organ": "Clitoral glands",
+    "PairedOrgan": true,
+    "Sex": "F"
+   }
+  ],
+  "diagnoses": [
+   {
+    "DiagnosisID": 1,
+    "OrganID": 3,
+    "Diagnosis": "Hepatocellular adenoma",
+    "Code": "N"
+   },
+   {
+    "DiagnosisID": 2,
+    "OrganID": 2,
+    "Diagnosis": "Alveolar histiocytosis",
+    "Code": "H"
+   },
+   {
+    "DiagnosisID": 3,
+    "OrganID": 6,
+    "Diagnosis": "Lymphoid hyperplasia",
+    "Code": "H"
+   },
+   {
+    "DiagnosisID": 4,
+    "OrganID": null,
+    "Diagnosis": "Inflammation",
+    "Code": "H"
+   }
+  ],
+  "sites": [
+   {
+    "SiteID": 1,
+    "OrganID": null,
+    "Site": "Diffuse"
+   },
+   {
+    "SiteID": 1,
+    "OrganID": null,
+    "Site": "Focal"
+   },
+   {
+    "SiteID": 1,
+    "OrganID": null,
+    "Site": "Multifocal"
+   },
+   {
+    "SiteID": 1,
+    "OrganID": null,
+    "Site": "Left lateral lobe"
+   },
+   {
+    "SiteID": 1,
+    "OrganID": null,
+    "Site": "Median lobe"
+   }
+  ],
+  "morphology": [
+   {
+    "MorphologyID": 0,
+    "Morphology": "Mass"
+   },
+   {
+    "MorphologyID": 1,
+    "Morphology": "Nodule"
+   },
+   {
+    "MorphologyID": 2,
+    "Morphology": "Cyst"
+   },
+   {
+    "MorphologyID": 3,
+    "Morphology": "Enlarged"
+   },
+   {
+    "MorphologyID": 4,
+    "Morphology": "Discolored"
+   },
+   {
+    "MorphologyID": 5,
+    "Morphology": "Fluid filled"
+   }
+  ],
+  "shapes": [
+   {
+    "ShapeID": 1,
+    "Shape": "Round"
+   },
+   {
+    "ShapeID": 2,
+    "Shape": "Irregular"
+   }
+  ],
+  "colors": [
+   {
+    "ColorID": 0,
+    "Color": "White"
+   },
+   {
+    "ColorID": 1,
+    "Color": "Tan"
+   },
+   {
+    "ColorID": 2,
+    "Color": "Red"
+   },
+   {
+    "ColorID": 3,
+    "Color": "Dark red"
+   },
+   {
+    "ColorID": 4,
+    "Color": "Pale"
+   }
+  ],
+  "consistencies": [
+   {
+    "ConsistencyID": 1,
+    "Consistency": "Firm"
+   },
+   {
+    "ConsistencyID": 2,
+    "Consistency": "Soft"
+   }
+  ],
+  "fates": [
+   {
+    "FateID": 0,
+    "Fate": "Scheduled euthanasia"
+   },
+   {
+    "FateID": 1,
+    "Fate": "Moribund euthanasia"
+   },
+   {
+    "FateID": 2,
+    "Fate": "Found dead"
+   }
+  ],
+  "conditions": [
+   {
+    "ConditionID": 1,
+    "Condition": "Good"
+   },
+   {
+    "ConditionID": 2,
+    "Condition": "Autolyzed"
+   }
+  ],
+  "physicalIds": [
+   {
+    "PhysicalID": 1,
+    "Description": "Ear tag"
+   },
+   {
+    "PhysicalID": 2,
+    "Description": "Tattoo"
+   }
+  ],
+  "fixatives": [
+   {
+    "FixativeID": 1,
+    "Fixative": "10% Neutral Buffered Formalin"
+   },
+   {
+    "FixativeID": 2,
+    "Fixative": "Davidson's"
+   },
+   {
+    "FixativeID": 3,
+    "Fixative": "Modified Davidson's"
+   }
+  ],
+  "freezes": [
+   {
+    "FreezeID": 1,
+    "Freeze": "Snap freeze"
+   },
+   {
+    "FreezeID": 2,
+    "Freeze": "OCT"
+   }
+  ],
+  "severities": [
+   {
+    "SeverityID": 0,
+    "Severity": "Minimal"
+   },
+   {
+    "SeverityID": 1,
+    "Severity": "Mild"
+   },
+   {
+    "SeverityID": 2,
+    "Severity": "Moderate"
+   },
+   {
+    "SeverityID": 3,
+    "Severity": "Marked"
+   },
+   {
+    "SeverityID": 4,
+    "Severity": "Severe"
+   }
+  ],
+  "distributions": [
+   {
+    "DistributionID": 1,
+    "Distribution": "Focal"
+   },
+   {
+    "DistributionID": 2,
+    "Distribution": "Multifocal"
+   },
+   {
+    "DistributionID": 3,
+    "Distribution": "Diffuse"
+   }
+  ],
+  "neoplasms": [
+   {
+    "NeoplasmID": 1,
+    "Neoplasm": "Benign"
+   },
+   {
+    "NeoplasmID": 2,
+    "Neoplasm": "Malignant"
+   }
+  ],
+  "hn": [
+   {
+    "HNID": 1,
+    "HN": "H"
+   },
+   {
+    "HNID": 2,
+    "HN": "N"
+   }
+  ],
+  "species": [
+   {
+    "SpeciesID": 1,
+    "Species": "Mouse"
+   },
+   {
+    "SpeciesID": 2,
+    "Species": "Rat"
+   }
+  ],
+  "chemistryRanges": [
+   {
+    "ChemistryRangeID": 1,
+    "SpeciesId": 1,
+    "ALB": "2.5-4.8",
+    "ALP": "62-209",
+    "ALT": "28-132",
+    "AMY": "211-563",
+    "TBIL": "0.1-0.9",
+    "BUN": "18-29",
+    "CA": "8.8-11.5",
+    "PHOS": "6.1-10.1",
+    "CRE": "0.2-0.8",
+    "GLU": "90-192",
+    "NAPlus": "140-160",
+    "KPlus": "4.7-6.4",
+    "TP": "3.6-6.6",
+    "GLOB": "1.0-3.2"
+   }
+  ],
+  "hematologyRanges": [
+   {
+    "HematologyRangeID": 1,
+    "SpeciesId": 1,
+    "WBC": "1.8-10.7",
+    "NE": "0.1-2.4",
+    "LY": "0.9-9.3",
+    "NEPercent": "6.6-38.9",
+    "RBC": "6.36-9.42",
+    "Hb": "11.0-15.1",
+    "HCT": "35.1-45.4",
+    "PLT": "592-2972"
+   }
+  ]
+ }
+}

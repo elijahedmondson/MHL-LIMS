@@ -1,0 +1,86 @@
+@page "/requests/{Id:int}"
+@inject LookupService Lookup
+
+<PageTitle>@(detail?.RequestNumber ?? "Request") · MHL LIMS</PageTitle>
+
+@if (loaded && detail is null)
+{
+    <h1>Request not found</h1>
+    <p><a href="/">Back to lookup</a></p>
+}
+else if (detail is not null)
+{
+    <h1>@detail.RequestNumber <span class="badge">@detail.Status</span></h1>
+    <p class="hint">@detail.RequestType · received @detail.ReceivedDate.ToString("yyyy-MM-dd")
+        @if (detail.DueDate is not null) { <text> · due @detail.DueDate.Value.ToString("yyyy-MM-dd")</text> }
+    </p>
+
+    <section class="cards">
+        <div class="card">
+            <h2>Investigator</h2>
+            <p>@detail.Investigator</p>
+            <p class="muted">@detail.InvestigatorEmail</p>
+        </div>
+        <div class="card">
+            <h2>Funding</h2>
+            <p>NAS# @(detail.NasNumber ?? "none")</p>
+            <p class="muted">Project @(detail.ProjectNumber ?? "none")</p>
+            @if (detail.NasAuthorized is not null)
+            {
+                <p>Authorized @detail.NasAuthorized.Value.ToString("C") · charged @detail.ChargedTotal.ToString("C")
+                   · remaining <strong>@((detail.NasAuthorized.Value - detail.ChargedTotal).ToString("C"))</strong></p>
+            }
+        </div>
+        <div class="card">
+            <h2>Study</h2>
+            <p>@(detail.ZapNumber ?? "none")</p>
+            <p class="muted">@detail.StudyTitle</p>
+        </div>
+    </section>
+
+    <h2>Subjects (@detail.Subjects.Count)</h2>
+    <table class="grid">
+        <thead><tr><th>PHL#</th><th>Animal</th><th>Group</th><th>Priority</th><th>Current area</th><th>Since</th></tr></thead>
+        <tbody>
+            @foreach (var s in detail.Subjects)
+            {
+                <tr>
+                    <td>@s.PhlNumber</td><td>@s.AnimalNumber</td><td>@s.GroupCode</td><td>@s.Priority</td>
+                    <td>@(s.CurrentArea ?? "not yet tracked")</td>
+                    <td>@(s.ArrivedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h2>Charges by section</h2>
+    @if (detail.Charges.Count == 0)
+    {
+        <p class="muted">No charges yet.</p>
+    }
+    else
+    {
+        <table class="grid narrow">
+            <thead><tr><th>Section</th><th class="num">Lines</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+                @foreach (var c in detail.Charges)
+                {
+                    <tr><td>@c.SectionCode</td><td class="num">@c.Lines</td><td class="num">@c.Amount.ToString("C")</td></tr>
+                }
+                <tr class="total"><td>Total</td><td></td><td class="num">@detail.ChargedTotal.ToString("C")</td></tr>
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private RequestDetail? detail;
+    private bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        detail = await Lookup.GetRequestDetailAsync(Id);
+        loaded = true;
+    }
+}

@@ -1,0 +1,57 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 10:12:40 =~=~=~=~=~=~=~=~=~=~=~=
+            PICCOLO XPRESS
+05 Nov 2026 10:12 AM
+Comprehensive Metabolic Panel
+Patient ID: 26000330A
+Sample Type:    Other
+Rotor Lot Number: 6247CA1
+Serial Number:    0000P12077
+Operator ID:  JMB
+
+ALB    3.0  g/dL   3.3-5.5
+ALP     88  U/L    42-141
+ALT     52  U/L    10-47
+AST    121H U/L    11-38
+BUN     24  mg/dL  7-22
+CA     9.6  mg/dL  8.0-10.3
+CL-    104  mmol/L 98-108
+CRE    0.3L mg/dL  0.6-1.2
+GLU    176H mg/dL  73-118
+K+     6.1H mmol/L 3.6-5.1
+NA+    150  mmol/L 128-145
+TBIL   0.2  mg/dL  0.2-1.6
+TCO2    21  mmol/L 18-33
+TP     5.3  g/dL   6.4-8.1
+
+QC   OK
+HEM  0   LIP  0   ICT  0
+
+
+            PICCOLO XPRESS
+05 Nov 2026 10:12 AM
+Comprehensive Metabolic Panel
+Patient ID: 2600331A
+Sample Type:    Other
+Rotor Lot Number: 6247CA1
+Serial Number:    0000P12077
+Operator ID:  JMB
+
+ALB    3.2  g/dL   3.3-5.5
+ALP     95  U/L    42-141
+ALT     44  U/L    10-47
+AST     98H U/L    11-38
+BUN     21  mg/dL  7-22
+CA     9.9  mg/dL  8.0-10.3
+CL-    106  mmol/L 98-108
+CRE    0.2L mg/dL  0.6-1.2
+GLU    168H mg/dL  73-118
+K+     5.7H mmol/L 3.6-5.1
+NA+    152  mmol/L 128-145
+TBIL   0.3  mg/dL  0.2-1.6
+TCO2    23  mmol/L 18-33
+TP     5.5  g/dL   6.4-8.1
+
+QC   OK
+HEM  0   LIP  0   ICT  0
+
+
