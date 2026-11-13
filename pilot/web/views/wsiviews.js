@@ -1,4 +1,4 @@
-// Whole-slide imaging: the scan queue (PHL numbers in the Scan area, with the scanner and magnification to use),
+// Whole-slide imaging: the scan queue (MHL numbers in the Scan area, with the scanner and magnification to use),
 // registering images from the scanners' output (files, a folder, or the server reading the folders), review with pass
 // or rescan, the four scanners, and one image's page. File headers are read in the browser by /lib/wsi.mjs; the
 // images themselves are never uploaded or copied.
@@ -12,10 +12,10 @@ const TABS = [['queue', 'Scan queue'], ['review', 'To review'], ['import', 'Regi
 
 function imagesTable(rows, { unmatched = false } = {}) {
   if (!rows.length) return '<p class="empty">None.</p>';
-  return `<table class="t"><thead><tr><th>${unmatched ? 'File' : 'PHL#'}</th><th>${unmatched ? 'Why it did not match' : 'Slide'}</th><th>Scanner</th><th>Scanned</th><th>Status</th><th></th></tr></thead><tbody>
+  return `<table class="t"><thead><tr><th>${unmatched ? 'File' : 'MHL#'}</th><th>${unmatched ? 'Why it did not match' : 'Slide'}</th><th>Scanner</th><th>Scanned</th><th>Status</th><th></th></tr></thead><tbody>
     ${rows.map((x) => `<tr class="click" data-href="#/wsi/image/${x.id}">
       <td class="${unmatched ? '' : 'code'}">${unmatched ? esc(x.fileName) : `${esc(x.phl || '')}${x.zap ? `<br><span class="small muted">${esc(x.zap)}</span>` : ''}`}</td>
-      <td class="small">${unmatched ? 'No PHL number in the barcode or file name' : `${esc(slideText(x) || x.label || '')}<br><span class="muted">${esc(x.fileName)}</span>`}</td>
+      <td class="small">${unmatched ? 'No MHL number in the barcode or file name' : `${esc(slideText(x) || x.label || '')}<br><span class="muted">${esc(x.fileName)}</span>`}</td>
       <td class="small">${esc(x.scannerName)}${x.scannerStated ? '' : ' <span class="badge" title="The file did not say which scanner; check it on the image page">?</span>'}<br><span class="muted">${x.format}${x.mag ? `, ${x.mag}x` : ''}${x.channels ? `, ${x.channels} channels` : ''}</span></td>
       <td class="small">${fmtDate(x.scannedOn)} ${esc(x.scannedAt)}</td><td>${badge(x.status)}${x.reasons.length ? `<br><span class="small muted">${esc(x.reasons.join(', '))}</span>` : ''}</td>
       <td><a class="btn small quiet" href="#/wsi/image/${x.id}">${x.status === 'UNMATCHED' ? 'Assign' : x.status === 'TO_REVIEW' ? 'Review' : 'Open'}</a></td></tr>`).join('')}
@@ -27,14 +27,14 @@ export async function renderWsi(app, tab = 'queue') {
   const counts = { review: home.toReview.length + home.unmatched.length, queue: home.queue.reduce((n, q) => n + q.subjects.length, 0) };
   app.innerHTML = `
     <h1>Whole-slide imaging</h1>
-    <p class="muted">Slides are scanned on the Aperio AT2, Aperio GT 450, Aperio FL and Akoya PhenoImager HT. Each scanner reads the slide's barcode label and saves an image file; the LIMS reads those files' headers to register each image against its PHL number, then the image is checked and passed (which creates the scan charge) or sent back for rescanning.</p>
+    <p class="muted">Slides are scanned on the Aperio AT2, Aperio GT 450, Aperio FL and Akoya PhenoImager HT. Each scanner reads the slide's barcode label and saves an image file; the LIMS reads those files' headers to register each image against its MHL number, then the image is checked and passed (which creates the scan charge) or sent back for rescanning.</p>
     <nav class="subtabs" aria-label="WSI sections">${TABS.map(([k, l]) => `<a href="#/wsi/${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}${counts[k] ? ` <span class="count">${counts[k]}</span>` : ''}</a>`).join('')}</nav>
     <div id="wsi" class="section"></div>`;
   pageTop(app);
   const box = $('#wsi');
   if (tab === 'review') {
     box.innerHTML = `<h2>To review</h2><p class="small muted">Open each image in the viewer, check focus, tissue coverage and the label, then pass it or send the slide for rescanning.</p>${imagesTable(home.toReview)}
-      <h2 class="section">Images without a PHL number</h2><p class="small muted">Usually an unreadable barcode or a file named by hand. Open the image and assign it.</p>${imagesTable(home.unmatched, { unmatched: true })}`;
+      <h2 class="section">Images without an MHL number</h2><p class="small muted">Usually an unreadable barcode or a file named by hand. Open the image and assign it.</p>${imagesTable(home.unmatched, { unmatched: true })}`;
   } else if (tab === 'import') importTab(box, home);
   else if (tab === 'scanners') scannersTab(box, home);
   else if (tab === 'recent') {
@@ -50,35 +50,35 @@ function queueTab(box, home, meta) {
   const name = (id) => home.scanners.find((s) => s.id === id)?.name || id;
   const sel = new Set();
   box.innerHTML = home.queue.length ? `
-    <p class="small muted">PHL numbers waiting in the Scan area, by request. The scanner and magnification come from the request: fluorescent stains go to the PhenoImager HT (Opal) or the Aperio FL, brightfield at 40x to the GT 450 and at 20x to the AT2.</p>
+    <p class="small muted">MHL numbers waiting in the Scan area, by request. The scanner and magnification come from the request: fluorescent stains go to the PhenoImager HT (Opal) or the Aperio FL, brightfield at 40x to the GT 450 and at 20x to the AT2.</p>
     ${home.queue.map((q) => `
       <div class="panel section">
         <div class="row"><h3 style="margin:0"><a href="#/request/${q.requestId}">${esc(q.number)}</a> <span class="muted small">${esc(q.pi)}, ${esc(q.type)}${q.zap ? `, ${esc(q.zap)}` : ''}</span></h3><span class="spacer"></span>
           <span class="badge info">${esc(name(q.scanner))}</span> <span class="badge">${q.mag}x</span>${q.fluorescent ? ' <span class="badge k-opal">fluorescent</span>' : ''} <span class="small muted">Due ${fmtDate(q.due)}</span></div>
         ${q.stains.length ? `<p class="small muted">Stains: ${esc(q.stains.join(', '))}${q.ihcNumber ? ` (${esc(q.ihcNumber)})` : ''}</p>` : ''}
-        <table class="t"><thead><tr><th><span hidden>Select</span></th><th>PHL#</th><th>Animal or sample</th><th>In Scan since</th><th class="n">Passed</th><th class="n">To review</th><th class="n">Rescan</th>${q.expectedPer ? '<th class="n">Expected</th>' : ''}</tr></thead><tbody>
+        <table class="t"><thead><tr><th><span hidden>Select</span></th><th>MHL#</th><th>Animal or sample</th><th>In Scan since</th><th class="n">Passed</th><th class="n">To review</th><th class="n">Rescan</th>${q.expectedPer ? '<th class="n">Expected</th>' : ''}</tr></thead><tbody>
           ${q.subjects.map((s) => `<tr><td><input type="checkbox" data-sel="${s.id}" aria-label="Select ${esc(s.phl)}"></td><td class="code">${esc(s.phl)}${s.priority === 'S' ? ' <span class="badge stat">STAT</span>' : ''}</td><td>${esc(s.label)}</td>
             <td class="small">${fmtDate(s.since)}</td><td class="n">${s.passed || ''}</td><td class="n">${s.toReview ? `<span class="badge warn">${s.toReview}</span>` : ''}</td><td class="n">${s.rescan ? `<span class="badge stat">${s.rescan}</span>` : ''}</td>
             ${q.expectedPer ? `<td class="n small muted">about ${q.expectedPer}</td>` : ''}</tr>`).join('')}
         </tbody></table>
       </div>`).join('')}
     <div class="actions noprint"><button class="btn quiet" type="button" id="print">Print scan list</button><button class="btn" type="button" id="done">Scanning done: move on</button></div>
-    <p class="small muted noprint">Expected is the number of scans in the estimate divided by the PHL numbers on the request. Scanning done moves the selected PHL numbers to the next work area.</p>
+    <p class="small muted noprint">Expected is the number of scans in the estimate divided by the MHL numbers on the request. Scanning done moves the selected MHL numbers to the next work area.</p>
     <div id="scanlist" class="print-only"></div>`
-    : '<p class="empty">Nothing is waiting for scanning. PHL numbers appear here when they are moved to the Scan area.</p>';
+    : '<p class="empty">Nothing is waiting for scanning. MHL numbers appear here when they are moved to the Scan area.</p>';
   $$('[data-sel]', box).forEach((c) => c.addEventListener('change', () => { if (c.checked) sel.add(Number(c.dataset.sel)); else sel.delete(Number(c.dataset.sel)); }));
   const picked = () => (sel.size ? [...sel] : home.queue.flatMap((q) => q.subjects.map((s) => s.id)));
   $('#print')?.addEventListener('click', () => {
     const ids = new Set(picked());
     $('#scanlist').innerHTML = `<h2>Scan list ${fmtDate(meta.today)}</h2>${home.queue.map((q) => {
       const subs = q.subjects.filter((s) => ids.has(s.id));
-      return subs.length ? `<h3>${esc(q.number)}: ${esc(name(q.scanner))}, ${q.mag}x${q.fluorescent ? ', fluorescent' : ''}</h3><table class="t"><thead><tr><th>Done</th><th>PHL#</th><th>Animal or sample</th><th>Slides</th><th>Notes</th></tr></thead><tbody>
+      return subs.length ? `<h3>${esc(q.number)}: ${esc(name(q.scanner))}, ${q.mag}x${q.fluorescent ? ', fluorescent' : ''}</h3><table class="t"><thead><tr><th>Done</th><th>MHL#</th><th>Animal or sample</th><th>Slides</th><th>Notes</th></tr></thead><tbody>
         ${subs.map((s) => `<tr><td class="tick"><span class="box"></span></td><td class="code">${esc(s.phl)}</td><td>${esc(s.label)}</td><td>${q.expectedPer ? `about ${q.expectedPer}` : ''}</td><td></td></tr>`).join('')}</tbody></table>` : '';
     }).join('')}`;
     window.print();
   });
   $('#done')?.addEventListener('click', (e) => act(e.currentTarget, async () => {
-    if (!sel.size) { toast('Select the PHL numbers that are finished.', 'error'); return; }
+    if (!sel.size) { toast('Select the MHL numbers that are finished.', 'error'); return; }
     try { await api('POST', '/api/wsi/complete', { subjectIds: [...sel] }); }
     catch (err) {
       if (!/no passed slide image/.test(err.message) || !confirm(`${err.message}\n\nMove on anyway?`)) throw err;
@@ -144,7 +144,7 @@ function importTab(box, home) {
           <ul class="small">${home.scanners.map((s) => `<li>${esc(s.name)}: <code>${esc(s.folder || 'no folder set')}</code></li>`).join('')}</ul>
           <div class="actions"><button class="btn quiet" type="button" id="readsrv" ${home.scanners.some((s) => s.folder) ? '' : 'disabled'}>Read new images</button></div></div>` : ''}
         <div class="panel ${server ? 'section' : ''}"><h2>How images are matched</h2>
-          <p class="small">The PHL number is looked for in the barcode the scanner read, then in the slide ID and the file name. Slide labels printed by the LIMS read like <code>26000305A-B2-S01</code>: PHL number, block 2, slide 1; anything after (H&amp;E, CD8) is kept as the stain. An image whose barcode was unreadable waits under To review until someone assigns it.</p>
+          <p class="small">The MHL number is looked for in the barcode the scanner read, then in the slide ID and the file name. Slide labels printed by the LIMS read like <code>26000305A-B2-S01</code>: MHL number, block 2, slide 1; anything after (H&amp;E, CD8) is kept as the stain. An image whose barcode was unreadable waits under To review until someone assigns it.</p>
           <p class="small">The scanner comes from the instrument ID in the file (set each scanner's IDs under Scanners), then the model the file states, then your choice here, then a guess from the file type. If your choice disagrees with the file, the image says so.</p></div>
       </div>
     </div>`;
@@ -156,8 +156,8 @@ function importTab(box, home) {
     if (!files.length) { out.innerHTML = `<p class="small">No new images${skipped ? `: ${skipped} already registered` : ''}${ignored ? `; ${ignored} other files ignored` : ''}.</p>`; return; }
     const res = await api('POST', '/api/wsi/register', { source, label, scannerId: $('#wscan').value, files });
     await getMeta(true);
-    out.innerHTML = `<p class="small"><strong>${res.imported} registered</strong> (${res.matched} matched to PHL numbers${res.unmatched ? `, <a href="#/wsi/review">${res.unmatched} without a PHL number</a>` : ''})${res.duplicates + skipped ? `, ${res.duplicates + skipped} already registered` : ''}${res.unreadable ? `, ${res.unreadable} could not be read` : ''}${ignored ? `, ${ignored} other files ignored` : ''}.</p>
-      ${res.results.length ? `<ul class="small">${res.results.slice(0, 20).map((x) => `<li><a href="#/wsi/image/${x.id}">${esc(x.fileName)}</a>: ${x.phl ? `${esc(x.phl)}${slideText(x) ? `, ${esc(slideText(x))}` : ''}` : '<span class="fitnote">no PHL number</span>'} · ${esc(x.scannerName)}</li>`).join('')}</ul>` : ''}`;
+    out.innerHTML = `<p class="small"><strong>${res.imported} registered</strong> (${res.matched} matched to MHL numbers${res.unmatched ? `, <a href="#/wsi/review">${res.unmatched} without an MHL number</a>` : ''})${res.duplicates + skipped ? `, ${res.duplicates + skipped} already registered` : ''}${res.unreadable ? `, ${res.unreadable} could not be read` : ''}${ignored ? `, ${ignored} other files ignored` : ''}.</p>
+      ${res.results.length ? `<ul class="small">${res.results.slice(0, 20).map((x) => `<li><a href="#/wsi/image/${x.id}">${esc(x.fileName)}</a>: ${x.phl ? `${esc(x.phl)}${slideText(x) ? `, ${esc(slideText(x))}` : ''}` : '<span class="fitnote">no MHL number</span>'} · ${esc(x.scannerName)}</li>`).join('')}</ul>` : ''}`;
   };
   $('#wfiles').addEventListener('change', (e) => act(null, async () => { await send([...e.target.files].map((file) => ({ file, path: '' })), `${e.target.files.length} chosen file${e.target.files.length === 1 ? '' : 's'}`, 'files'); e.target.value = ''; }));
   $('#pick')?.addEventListener('click', () => act(null, async () => {
@@ -170,7 +170,7 @@ function importTab(box, home) {
   $('#readsrv')?.addEventListener('click', (e) => act(e.currentTarget, async () => {
     const res = await api('POST', '/api/wsi/read-folders', {});
     await getMeta(true);
-    out.innerHTML = res.scanners.map((r) => `<p class="small"><strong>${esc(r.scanner)}</strong>: ${r.error ? `<span class="fitnote">${esc(r.error)}</span>` : `${r.imported || 0} registered${r.unmatched ? ` (${r.unmatched} without a PHL number)` : ''}${r.duplicates ? `, ${r.duplicates} already registered` : ''}${r.recent ? `, ${r.recent} still being written` : ''}${r.errors ? `, ${r.errors} could not be read` : ''}`}</p>`).join('') || '<p class="small muted">No scanner has a folder set.</p>';
+    out.innerHTML = res.scanners.map((r) => `<p class="small"><strong>${esc(r.scanner)}</strong>: ${r.error ? `<span class="fitnote">${esc(r.error)}</span>` : `${r.imported || 0} registered${r.unmatched ? ` (${r.unmatched} without an MHL number)` : ''}${r.duplicates ? `, ${r.duplicates} already registered` : ''}${r.recent ? `, ${r.recent} still being written` : ''}${r.errors ? `, ${r.errors} could not be read` : ''}`}</p>`).join('') || '<p class="small muted">No scanner has a folder set.</p>';
   }));
 }
 
@@ -208,7 +208,7 @@ export async function renderWsiImage(app, id) {
       ${x.width && x.height ? `<span>${x.width.toLocaleString('en-US')} × ${x.height.toLocaleString('en-US')} px</span>` : ''}${x.sizeBytes ? `<span>${showBytes(x.sizeBytes)}</span>` : ''}<span>Scanned ${fmtDate(x.scannedOn)} ${esc(x.scannedAt)}</span>
       ${x.serial ? `<span>Instrument ${esc(x.serial)}</span>` : ''}${x.operator ? `<span>Operator ${esc(x.operator)}</span>` : ''}</div>
     ${d.subject ? `<p>Slide: <strong class="code">${esc(d.subject.phl)}</strong> ${esc(slideText(x))} · ${esc(d.subject.label)} · <a href="#/request/${d.request.id}/images">${esc(d.request.number)}</a> ${esc(d.request.piName)}
-      <span class="small muted">(found in the ${esc(x.idFrom)} “${esc(x.idText)}”)</span></p>` : '<p class="note">No PHL number was found in the barcode, slide ID or file name. Assign it below.</p>'}
+      <span class="small muted">(found in the ${esc(x.idFrom)} “${esc(x.idText)}”)</span></p>` : '<p class="note">No MHL number was found in the barcode, slide ID or file name. Assign it below.</p>'}
     ${x.status === 'PASSED' ? `<div class="locked">Passed by ${esc(x.qc.by)} on ${fmtDateTime(x.qc.at)}.${d.charge ? ` Charge ${esc(d.charge.code)} ${esc(d.charge.codeDescription)} (${d.charge.status.toLowerCase()}).` : ' No charge (no-charge request).'}${x.qc.note ? `<br>${esc(x.qc.note)}` : ''}</div>` : ''}
     ${x.status === 'RESCAN' ? `<div class="note">Sent for rescanning by ${esc(x.qc.by)} on ${fmtDateTime(x.qc.at)}: ${esc(x.qc.reasons.join(', '))}${x.qc.note ? `. ${esc(x.qc.note)}` : ''}</div>` : ''}
     <div class="split wide-left section">
@@ -231,7 +231,7 @@ export async function renderWsiImage(app, id) {
       </div>
       <div>
         ${open ? `<h2>${x.status === 'UNMATCHED' ? 'Assign to a slide' : 'Wrong slide?'}</h2>
-          <form class="form" id="assign" style="grid-template-columns:2fr 1fr 1fr"><div class="field"><label for="aphl">PHL# or slide ID</label><input id="aphl" value="${esc(d.subject?.phl || '')}" placeholder="26000305A-B2-S01" style="text-transform:uppercase"></div>
+          <form class="form" id="assign" style="grid-template-columns:2fr 1fr 1fr"><div class="field"><label for="aphl">MHL# or slide ID</label><input id="aphl" value="${esc(d.subject?.phl || '')}" placeholder="26000305A-B2-S01" style="text-transform:uppercase"></div>
             <div class="field"><label for="ablk">Block</label><input id="ablk" value="${esc(x.block)}" maxlength="6"></div><div class="field"><label for="asl">Slide</label><input id="asl" value="${esc(x.slide)}" maxlength="6"></div>
             <div class="full"><button class="btn ${x.status === 'UNMATCHED' ? '' : 'quiet'} small" type="submit">Assign</button></div></form>
           <div class="field section"><label for="wsc">Scanner</label><select id="wsc">${options(d.scanners.map((s) => [s.id, s.name]), x.scannerId)}</select></div>` : ''}
@@ -265,8 +265,8 @@ export async function renderWsiImage(app, id) {
 // The request page's Slide images tab.
 export function requestImagesHtml(d) {
   const by = d.subjects.map((s) => ({ s, imgs: d.images.filter((x) => x.subjectId === s.id) }));
-  return `<div class="row"><p class="muted" style="margin:0">Slide images registered from the scanners for each PHL number.</p><span class="spacer"></span><a class="btn small quiet" href="#/wsi">Whole-slide imaging</a></div>
-    <table class="t section"><thead><tr><th>PHL#</th><th>Animal or sample</th><th>Images</th></tr></thead><tbody>
+  return `<div class="row"><p class="muted" style="margin:0">Slide images registered from the scanners for each MHL number.</p><span class="spacer"></span><a class="btn small quiet" href="#/wsi">Whole-slide imaging</a></div>
+    <table class="t section"><thead><tr><th>MHL#</th><th>Animal or sample</th><th>Images</th></tr></thead><tbody>
     ${by.map(({ s, imgs }) => `<tr><td class="code">${esc(s.phl)}</td><td>${esc(s.label)}</td><td>${imgs.length ? imgs.map((x) => `<a href="#/wsi/image/${x.id}">${esc(slideText(x) || x.fileName)}</a> <span class="small muted">${esc(x.scannerName)}${x.mag ? ` ${x.mag}x` : ''}</span> ${badge(x.status)}`).join('<br>') : '<span class="muted">—</span>'}</td></tr>`).join('')}
     </tbody></table>`;
 }

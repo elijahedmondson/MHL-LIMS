@@ -1,6 +1,6 @@
 // The MHL Request Tracking Form: a landscape sheet printed when a request is created, which staff fill in by hand
 // (initials, procedure, units and date under each work area) as the samples move through the lab. Laid out like the
-// form PHL.exe printed (d_cmp001), with a new page for each priority and six PHL numbers to a page.
+// form PHL.exe printed (d_cmp001), with a new page for each priority and six MHL numbers to a page.
 import { $, api, esc, money, fmtDate, pageTop, code128Svg } from '../ui.js';
 
 const PER_PAGE = 6;
@@ -41,7 +41,7 @@ function headerHtml(h, group, page, pages) {
 }
 
 function tableHtml(columns, rows) {
-  const head = `<tr><th class="ts-phl">Phl No</th>${columns.map((c) => `<th class="ts-area ${c.inRequest ? '' : 'ts-off'}">${esc(c.label).replace('/', '/<br>')}</th><th class="ts-date ${c.inRequest ? '' : 'ts-off'}">Date</th>`).join('')}<th class="ts-lbl"></th></tr>`;
+  const head = `<tr><th class="ts-phl">MHL No</th>${columns.map((c) => `<th class="ts-area ${c.inRequest ? '' : 'ts-off'}">${esc(c.label).replace('/', '/<br>')}</th><th class="ts-date ${c.inRequest ? '' : 'ts-off'}">Date</th>`).join('')}<th class="ts-lbl"></th></tr>`;
   const body = rows.map((r) => {
     const sub = ['inits', 'proc', 'units'].map((k, i) => `<tr class="ts-sub ts-${k}">
       ${i === 0 ? `<td class="ts-phl" rowspan="3"><div class="ts-phlbox"><b>${esc(r.phl)}</b><span>${r.restricted || !/^\d+$/.test(String(r.label)) ? esc(r.label) : `An# ${esc(r.label)}`}${r.groupCode ? ` · ${esc(r.groupCode)}` : ''}${r.sex ? ` ${esc(r.sex)}` : ''}</span></div></td>` : ''}
@@ -68,7 +68,7 @@ export async function renderTracking(app, requestId) {
         <label class="small"><input type="checkbox" id="done" ${showDone ? 'checked' : ''}> Fill in work already recorded in the LIMS</label>
         <button class="btn" type="button" id="print">Print tracking sheet</button>
       </div>
-      <p class="small muted noprint">${t.count} PHL numbers on ${pages.length} page${pages.length === 1 ? '' : 's'}, a new page for each priority. Print it landscape on letter paper (the page is set to landscape for Edge and Chrome). Shaded columns are work areas this request does not include.</p>
+      <p class="small muted noprint">${t.count} MHL numbers on ${pages.length} page${pages.length === 1 ? '' : 's'}, a new page for each priority. Print it landscape on letter paper (the page is set to landscape for Edge and Chrome). Shaded columns are work areas this request does not include.</p>
       <div class="ts-sheets">${pages.map((p, i) => `<section class="ts-page">${headerHtml(h, p.group, i + 1, pages.length)}${tableHtml(t.columns, p.rows)}
         <div class="ts-foot">Printed ${fmtDate(h.printedOn)} · Pilot with test data</div></section>`).join('')}</div>`;
     pageTop(app);

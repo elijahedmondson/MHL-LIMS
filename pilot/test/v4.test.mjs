@@ -134,7 +134,7 @@ test('saved data from version 3 upgrades: protocols split, studies and necropsie
   for (const n of Object.values(old.necropsies)) { delete n.necropsyProtocolId; delete n.trimProtocolId; }
   old.version = 3;
   const core = createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 7);   // versions 5 (slide imaging), 6 (estimates) and 7 run after it
+  assert.equal(old.version, 8);   // versions 5 (slide imaging), 6 (estimates), 7 and 8 run after it
   const zap = old.studies.find((s) => s.zap === 'ZAP2231');
   assert.equal(zap.necropsyProtocolId, 3); assert.equal(zap.trimProtocolId, 3);
   const study = core.handle('GET', `/api/studies/${zap.id}`).json;
@@ -190,7 +190,7 @@ test('loading SEND CT, adding a term, and the SEND-style microscopic findings ta
   assert.ok(state.library.diagnoses.some((d) => d.term === 'Bronchiolo-alveolar hyperplasia, atypical'));
   const zap = state.studies.find((s) => s.zap === 'ZAP2215');
   const csv = call('GET', `/api/studies/${zap.id}/send-mi.csv`).content.split('\r\n');
-  assert.match(csv[0], /^STUDYID,USUBJID,PHL,GROUP,SEX,MISEQ,MISPEC,MIORRES,MISTRESC,MIRESCAT,MISEV/);
+  assert.match(csv[0], /^STUDYID,USUBJID,MHL,GROUP,SEX,MISEQ,MISPEC,MIORRES,MISTRESC,MIRESCAT,MISEV/);
   assert.ok(csv.some((l) => l.includes('LUNG') && l.includes('"ADENOMA, BRONCHIOLOALVEOLAR, BENIGN"') && l.endsWith(',Yes')), 'neoplasms coded with the verified SEND value');
   assert.ok(csv.some((l) => l.includes('MINIMAL') || l.includes('MILD') || l.includes('MODERATE')), 'severity in SEND words');
   const lib = call('GET', '/api/library');
@@ -269,7 +269,7 @@ test('the Hemavet DMS export is read from a real .xls (BIFF8) and from CSV, with
   assert.equal(ext.results[0].analytes.find((x) => x.code === 'HCT').value, 12);   // HCT is on row 19 in the newer layout
 });
 
-test('bloodwork imports match PHL numbers, skip repeats, and are reviewed, released (with the charge), reopened and rejected', () => {
+test('bloodwork imports match MHL numbers, skip repeats, and are reviewed, released (with the charge), reopened and rejected', () => {
   const { state, call, fails } = fresh();
   const res = call('POST', '/api/bloodwork/import', { fileName: 'Piccolo.txt', text: sample('instruments', 'Piccolo-session-2026-11-05.txt').toString('utf8') });
   assert.deepEqual([res.imported, res.matched, res.unmatched], [2, 1, 1]);
@@ -277,7 +277,7 @@ test('bloodwork imports match PHL numbers, skip repeats, and are reviewed, relea
   const unmatched = state.bloodwork.results.find((r) => r.status === 'UNMATCHED');
   assert.equal(unmatched.sampleId, '2600331A');
   assert.match(fails('POST', `/api/bloodwork/results/${unmatched.id}/release`, {}), /Assign/);
-  assert.match(fails('POST', `/api/bloodwork/results/${unmatched.id}/assign`, { phl: '99999999Z' }), /not a PHL number/);
+  assert.match(fails('POST', `/api/bloodwork/results/${unmatched.id}/assign`, { phl: '99999999Z' }), /not an MHL number/);
   call('POST', `/api/bloodwork/results/${unmatched.id}/assign`, { phl: '26000331a' });
   const d = call('POST', `/api/bloodwork/results/${unmatched.id}/release`, { comment: 'Sample ID mistyped on the analyzer.' });
   assert.equal(d.result.status, 'RELEASED');
@@ -304,7 +304,7 @@ test('hematology grids import as one result per sample column; the study summary
   const wbc = heme.analytes.find((a) => a.code === 'WBC');
   assert.ok(wbc.groups.find((g) => g.code === 'G1').mean > wbc.groups.find((g) => g.code === 'G2').mean, 'tumor-bearing controls have the higher WBC in the seed data');
   const csv = call('GET', `/api/studies/${zap.id}/bloodwork.csv`).content;
-  assert.match(csv.split('\r\n')[0], /^ZAP,PHL,Animal,Group,Sex,Kind,Instrument,Date,Time,Analyte,Value/);
+  assert.match(csv.split('\r\n')[0], /^ZAP,MHL,Animal,Group,Sex,Kind,Instrument,Date,Time,Analyte,Value/);
   const report = call('GET', `/api/subjects/${state.subjects.find((s) => s.studyId === zap.id).id}/bloodwork`);
   assert.ok(report.results.length >= 1);
 });
@@ -351,10 +351,10 @@ test('New request can order catalog stains: the estimate adds them, and the requ
 
 test('antibody details are read from the catalog text', async () => {
   const { antibodyInfo } = await import('../core/ihc.mjs');
-  assert.deepEqual(antibodyInfo({ name: '2A Peptide (3H4)', catalog: 'NBP2-59627B (biotin ms IgG1)', plex: 1 }), { clone: '3H4', host: 'Mouse', isotype: 'IgG1', clonality: 'Monoclonal', conjugate: 'Biotin' });
+  assert.deepEqual(antibodyInfo({ name: '2A Peptide (3H4)', catalog: 'NBP2-59627B (biotin ms IgG1)', plex: 1 }), { clone: '3H4', host: 'Mouse', isotype: 'IgG1', clonality: 'Monoclonal', conjugate: 'Biotin', from: { clone: 'text', host: 'text', clonality: 'text' }, cloneNotApplicable: false });
   assert.equal(antibodyInfo({ name: 'CD34 (RAM34)', catalog: '14-0341 (rat IgG2a)', plex: 1 }).clone, 'RAM34');
   assert.equal(antibodyInfo({ name: 'CD56 (NCAM1)', catalog: 'ab1 (rabb mAb)', plex: 1 }).clone, '', 'gene aliases are not clones');
-  assert.deepEqual(antibodyInfo({ name: 'Iba1', catalog: '019-19741 (rabb pAb)', plex: 1 }), { clone: '', host: 'Rabbit', isotype: '', clonality: 'Polyclonal', conjugate: '' });
+  assert.deepEqual(antibodyInfo({ name: 'Iba1', catalog: '019-19741 (rabb pAb)', plex: 1 }), { clone: '', host: 'Rabbit', isotype: '', clonality: 'Polyclonal', conjugate: '', from: { host: 'text', clonality: 'text' }, cloneNotApplicable: false });
   assert.equal(antibodyInfo({ name: '6-plex x', catalog: 'a (rabb mAb), b (ms IgG1)', plex: 6 }).several, true);
 });
 

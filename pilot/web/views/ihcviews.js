@@ -5,7 +5,7 @@ import { $, $$, api, esc, money, fmtDate, fmtDateTime, getMeta, sectionName, act
 
 export function ihcTabs(current, meta) {
   const t = [['requests', '#/molecular', `IHC requests${meta.ihc.unassigned ? ` <span class="count" title="Not assigned yet">${meta.ihc.unassigned}</span>` : ''}`],
-    ['xenium', '#/molecular/xenium', `Xenium${meta.ihc.xeniumQueue ? ` <span class="count" title="PHL numbers waiting for a run">${meta.ihc.xeniumQueue}</span>` : ''}`],
+    ['xenium', '#/molecular/xenium', `Xenium${meta.ihc.xeniumQueue ? ` <span class="count" title="MHL numbers waiting for a run">${meta.ihc.xeniumQueue}</span>` : ''}`],
     ['catalog', '#/molecular/assays', 'Assay catalog'], ['calculator', '#/molecular/calculator', 'Antibody dilution calculator']];
   return `<h1>Molecular</h1><nav class="subtabs" aria-label="Molecular sections">${t.map(([k, href, label]) => `<a href="${href}" ${k === current ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
@@ -124,6 +124,107 @@ export function estimateTable(meta, est) {
 
 const sampleTypeName = (meta, k) => meta.ihc.sampleTypes.find(([c]) => c === k)?.[1] || k;
 
+// ---------- changing the stains on an IHC request ----------
+// Used on the review page (before accepting) and on an accepted request until its work is done: replace a protocol
+// chosen for the wrong species, add a stain to work in progress, or remove one. Saving records who changed what, and
+// why, in the request's history; on an accepted request the estimate changes by the difference.
+const RESULT_CLS = { Works: 'complete', Optimizing: 'warn', Failed: 'stat' };
+const coded = (a) => [a.preferred ? '<span class="badge complete">★ Preferred</span>' : '', a.visibility === 'Internal' ? '<span class="badge muted">Not public</span>' : '',
+  a.result && a.result !== 'Works' ? `<span class="badge ${RESULT_CLS[a.result] || ''}">${esc(a.resultLabel || a.result)}</span>` : ''].filter(Boolean).join(' ');
+
+function stainEditor(box, { w, stains, meta, onSaved, onCancel }) {
+  const types = [...new Set(w.samples.map((s) => s.type))].join(',');
+  const fluorescent = (v) => v && (v.kind === 'Opal' || v.kind === 'IF' || v.chromogen === 'Fluorescent');
+  // Working copy: each stain with what is needed to show it.
+  const list = stains.map((s) => (s.newAntibody ? { newAntibody: { ...s.newAntibody }, chromogen: s.chromogen }
+    : { assayId: s.assayId, chromogen: s.chromogen, view: { ...(s.snapshot || {}), kindLabel: s.current?.kindLabel || s.kindLabel || s.snapshot?.kind, fit: [] } }));
+  let replacing = null; let found = [];
+  const accepted = w.status === 'Accepted';
+  box.innerHTML = `
+    <div class="panel section noprint" id="stain-editor">
+      <h2>Change stains on ${esc(w.number)}</h2>
+      <p class="small muted">Material: ${esc(meta.ihc.species.find(([k]) => k === w.species)?.[1] || w.species)}, ${esc(w.fixativeUsed)}${types ? `, ${esc(types.split(',').map((t) => sampleTypeName(meta, t).toLowerCase()).join(' and '))}` : ''}. Protocols validated for this material come first.
+        ${accepted ? 'Stains that stay keep the protocol as it was requested; a new one uses the catalog as it is now. The request\'s estimate changes by the difference.' : ''}</p>
+      <div id="se-list"></div>
+      <h3 class="section" id="se-findlabel">Add a stain</h3>
+      <div class="picker" style="max-width:none;margin-top:0"><input id="se-find" placeholder="Target, clone or catalog number, e.g. CD8, D4W2Z, ab101500" autocomplete="off" aria-labelledby="se-findlabel"></div>
+      <div id="se-found" aria-live="polite"></div>
+      <details class="section"><summary><strong>The antibody is not in the catalog</strong></summary>
+        <form class="form section" id="se-new" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label for="se-nn">Target</label><input id="se-nn" maxlength="120" required></div>
+          <div class="field"><label for="se-nl">Clone</label><input id="se-nl" maxlength="40"></div>
+          <div class="field"><label for="se-nm">Manufacturer</label><input id="se-nm" maxlength="120" required></div>
+          <div class="field"><label for="se-nc">Catalog number</label><input id="se-nc" maxlength="60"></div>
+          <div class="field"><label for="se-nh">Host and clonality</label><input id="se-nh" maxlength="60" placeholder="e.g. Rabbit monoclonal"></div>
+          <div class="field"><label><input type="checkbox" id="se-ns"> The investigator supplies it</label></div>
+          <div class="full"><button class="btn quiet" type="submit">Add new antibody</button></div>
+        </form>
+      </details>
+      <div class="field section"><label for="se-reason">Reason for the change${accepted ? ' (required, kept in the history)' : ' (kept in the history)'}</label>
+        <input id="se-reason" class="inp" maxlength="300" placeholder="e.g. Wrong species: mouse CD8 instead of the human protocol"></div>
+      <div class="actions" style="margin-top:10px"><button class="btn" type="button" id="se-save">Save stains</button><button class="btn quiet" type="button" id="se-cancel">Cancel</button></div>
+    </div>`;
+
+  const drawList = () => {
+    $('#se-list').innerHTML = list.length ? `<table class="t"><tbody>${list.map((s, i) => {
+      const v = s.view || {};
+      return `<tr class="${replacing === i ? 'sel-row' : ''}"><td>${s.newAntibody ? `<strong>${esc(s.newAntibody.name)}</strong> <span class="badge warn">not in catalog</span><br><span class="small muted">${esc([s.newAntibody.host, s.newAntibody.manufacturer, s.newAntibody.catalog].filter(Boolean).join(', '))}</span>`
+        : `<strong>${esc(v.name)}</strong> ${kindBadge(v)} <span class="small muted">#${s.assayId}</span> ${coded(v)}<br><span class="small muted">${esc([v.species || 'species not recorded', v.fixative, v.dilution, `${v.manufacturer || ''} ${v.catalog || ''}`.trim()].filter(Boolean).join(' · '))}</span>${v.fit?.length ? `<br><span class="small fitnote">${esc(v.fit.join('; '))}</span>` : ''}`}
+        ${replacing === i ? '<br><span class="badge info">Choose its replacement below</span>' : ''}</td>
+        <td>${s.newAntibody || fluorescent(v) ? '' : `<select data-chrom="${i}" aria-label="Chromogen">${options([['DAB', 'DAB'], ['Red', 'Red']], s.chromogen)}</select>`}</td>
+        <td class="mid"><div class="rowbtns">${s.newAntibody ? '' : `<button class="btn small quiet" type="button" data-replace="${i}">${replacing === i ? 'Stop replacing' : 'Replace…'}</button>`}<button class="btn small quiet" type="button" data-rm="${i}">Remove</button></div></td></tr>`;
+    }).join('')}</tbody></table>` : `<p class="empty" style="padding:8px 0">No stains.${w.he.on || w.unstained.on ? ' H&amp;E or unstained slides are still made.' : ''}</p>`;
+    $('#se-findlabel').textContent = replacing != null ? `Replace ${list[replacing].view?.name || ''} with` : 'Add a stain';
+    $$('[data-chrom]', box).forEach((sel) => sel.addEventListener('change', () => { list[Number(sel.dataset.chrom)].chromogen = sel.value; }));
+    $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { const i = Number(b.dataset.rm); list.splice(i, 1); if (replacing === i) replacing = null; else if (replacing > i) replacing--; drawList(); search(); }));
+    $$('[data-replace]', box).forEach((b) => b.addEventListener('click', () => {
+      const i = Number(b.dataset.replace);
+      replacing = replacing === i ? null : i;
+      if (replacing != null && !$('#se-find').value.trim()) $('#se-find').value = (list[i].view?.name || '').replace(/\s*\(.*$/, '');
+      drawList(); search(); $('#se-find').focus();
+    }));
+  };
+  const search = async () => {
+    const q = $('#se-find').value.trim();
+    if (!q) { $('#se-found').innerHTML = ''; return; }
+    const res = await api('GET', `/api/ihc/assays?q=${encodeURIComponent(q)}&limit=15&fitSpecies=${encodeURIComponent(w.species)}&fitFixative=${encodeURIComponent(w.fixativeUsed)}&fitTypes=${encodeURIComponent(types)}`);
+    found = res.assays;
+    const have = new Set(list.map((s) => s.assayId).filter(Boolean));
+    $('#se-found').innerHTML = found.length ? `<ul class="found-list">${found.map((a, i) => `<li class="${a.fit.length || a.result === 'Failed' ? 'misfit' : ''}">
+        <div><strong>${esc(a.name)}</strong> ${kindBadge(a)} <span class="small muted">#${a.id}</span> ${coded(a)}<br>
+          <span class="small muted">${esc([a.species || 'species not recorded', a.fixative, a.dilution, `${a.manufacturer} ${a.catalog}`.trim()].filter(Boolean).join(' · '))}</span>
+          ${a.fit.length ? `<br><span class="small fitnote">${esc(a.fit.join('; '))}</span>` : ''}</div>
+        <div>${have.has(a.id) ? '<span class="badge complete">On the request</span>' : `<button class="btn small ${a.fit.length || a.result === 'Failed' ? 'quiet' : ''}" type="button" data-pick="${i}">${replacing != null ? 'Use instead' : 'Add'}</button>`}</div></li>`).join('')}</ul>
+      ${res.total > found.length ? `<p class="small muted">${res.total - found.length} more; type more to narrow it down.</p>` : ''}`
+      : `<p class="small muted">Nothing in the catalog matches “${esc(q)}”.</p>`;
+    $$('[data-pick]', $('#se-found')).forEach((b) => b.addEventListener('click', () => {
+      const a = found[Number(b.dataset.pick)];
+      const item = { assayId: a.id, chromogen: fluorescent(a) ? a.chromogen : (a.chromogen === 'Red' ? 'Red' : 'DAB'), view: a };
+      if (replacing != null) { list[replacing] = item; replacing = null; } else list.push(item);
+      $('#se-find').value = '';
+      drawList(); search();
+    }));
+  };
+  let t = null;
+  $('#se-find').addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 150); });
+  $('#se-new').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const clone = $('#se-nl').value.trim();
+    list.push({ chromogen: 'DAB', newAntibody: { name: `${$('#se-nn').value.trim()}${clone ? ` (clone ${clone})` : ''}`, manufacturer: $('#se-nm').value.trim(), catalog: $('#se-nc').value.trim(),
+      host: $('#se-nh').value.trim(), supplied: $('#se-ns').checked, notes: '' } });
+    e.target.reset(); drawList();
+  });
+  $('#se-cancel').addEventListener('click', onCancel);
+  $('#se-save').addEventListener('click', (e) => act(e.currentTarget, async () => {
+    const res = await api('PUT', `/api/ihc/requests/${w.id}/stains`, { reason: $('#se-reason').value.trim(),
+      stains: list.map((s) => (s.newAntibody ? { newAntibody: s.newAntibody, chromogen: s.chromogen } : { assayId: s.assayId, chromogen: s.chromogen })) });
+    await onSaved(res);
+    return res;
+  }, (res) => `${res.change}${res.estimateBefore != null && res.estimateBefore !== res.estimateAfter ? `. Estimate ${money(res.estimateBefore)} → ${money(res.estimateAfter)}` : ''}${res.warning ? `. ${res.warning}` : ''}`));
+  drawList();
+  $('#se-find').focus();
+}
+
 // The request as submitted, in the order of the form's steps. Also used for the investigator's printable copy.
 export function requestSummary(meta, w, { stains = w.stains, matches = [], linkAssays = true } = {}) {
   const rq = w.requester;
@@ -155,7 +256,7 @@ export function requestSummary(meta, w, { stains = w.stains, matches = [], linkA
     <section class="step-sum"><h3>7. Additional information</h3><p>${esc(w.additional) || '<span class="muted">None</span>'}</p></section>`;
 }
 
-// New request > review an IHC request from the web form, then accept it (a request with PHL numbers) or decline it.
+// New request > review an IHC request from the web form, then accept it (a request with MHL numbers) or decline it.
 export async function renderIhcReview(app, id) {
   const [meta, d] = await Promise.all([getMeta(true), api('GET', `/api/ihc/requests/${id}`)]);
   const w = d.request;
@@ -166,17 +267,19 @@ export async function renderIhcReview(app, id) {
     <div class="head"><h1>${esc(w.number)}</h1>${webBadge(w.status)}${w.importance === 'STAT' ? '<span class="badge stat">STAT</span>' : ''}</div>
     ${factsHtml(w)}
     <p class="muted" style="margin-top:8px">${esc(d.summary)}</p>
+    <div id="stain-edit-box"></div>
     <div class="split wide-left section">
       <div>${requestSummary(meta, w, { stains: d.stains, matches: d.matches })}</div>
       <div>
         ${d.warnings.length ? `<h2>Check before accepting</h2>${d.warnings.map((x) => `<p class="note">${esc(x)}</p>`).join('')}` : '<p class="note ok">Nothing to flag: every stain is in the catalog and fits the species and fixative.</p>'}
-        ${d.matches.length ? `<p class="note info">${d.matches.length} of the blocks are already PHL numbers in the LIMS. Their history stays linked.</p>` : ''}
+        <div class="actions noprint" style="margin-top:8px"><button class="btn quiet" type="button" id="chg-stains">Change stains…</button></div>
+        ${d.matches.length ? `<p class="note info">${d.matches.length} of the blocks are already MHL numbers in the LIMS. Their history stays linked.</p>` : ''}
         <h2 class="section">Estimate</h2>
         <p class="small muted">From the samples and stains, priced from the ${esc(meta.priceList.name)} list. It becomes the request's initial estimate.</p>
         ${estimateTable(meta, d.estimate)}
         <div class="panel section noprint" id="accept">
           <h2>Accept</h2>
-          <p class="small muted">Creates a request (${esc(meta.requestTypes.MOLEC.name)}) with one PHL number per block, due in ${meta.requestTypes.MOLEC.days} days. Its IHC work is then assigned under Molecular.</p>
+          <p class="small muted">Creates a request (${esc(meta.requestTypes.MOLEC.name)}) with one MHL number per block, due in ${meta.requestTypes.MOLEC.days} days. Its IHC work is then assigned under Molecular.</p>
           <div class="field"><label for="nas">NAS request (funding)</label>
             <select id="nas" class="inp">${options([['', 'Link a NAS request later'], ...nasOpts.map((n) => [n.id, `${n.number}, ${n.requester.last}, ${money(n.authorized)}${n.requests ? `, ${n.requests} request${n.requests === 1 ? '' : 's'} already` : ''}${n.suggested ? ' (same investigator)' : ''}`])], nasOpts.find((n) => n.suggested)?.id || '')}</select></div>
           <div class="actions" style="margin-top:14px"><button class="btn" type="button" id="do-accept">Accept and create request</button><button class="btn quiet" type="button" id="do-decline">Decline</button></div>
@@ -187,12 +290,16 @@ export async function renderIhcReview(app, id) {
     </div>`;
   pageTop(app);
   $('#print').addEventListener('click', () => window.print());
+  $('#chg-stains').addEventListener('click', () => {
+    stainEditor($('#stain-edit-box'), { w, stains: d.stains, meta, onSaved: () => renderIhcReview(app, id), onCancel: () => { $('#stain-edit-box').innerHTML = ''; } });
+    $('#stain-edit-box').scrollIntoView({ block: 'start' });
+  });
   $('#do-accept').addEventListener('click', (e) => act(e.currentTarget, async () => {
     const res = await api('POST', `/api/ihc/requests/${w.id}/accept`, { nasId: $('#nas').value ? Number($('#nas').value) : null });
     await getMeta(true);
     navigate(`#/new/created/${res.id}`);
     return res;
-  }, (res) => `Accepted as ${res.number}: ${res.phls.length} PHL numbers issued`));
+  }, (res) => `Accepted as ${res.number}: ${res.phls.length} MHL numbers issued`));
   $('#do-decline').addEventListener('click', (e) => {
     const reason = prompt(`Decline ${w.number}? The investigator sees this reason:`, '');
     if (!reason) return;
@@ -230,7 +337,10 @@ export async function renderIhcRequest(app, id) {
           ${['Not started', 'In progress', 'Done'].map((st) => `<button class="btn small ${st === work ? '' : 'quiet'}" type="button" data-st="${esc(st)}" aria-pressed="${st === work}" ${st === work ? 'disabled' : ''}>${esc(st)}</button>`).join('')}
         </div>
         ${w.assignedBy ? `<p class="small muted" style="margin:6px 0 0">${w.assignedTo ? `Assigned to ${esc(w.assignedTo)}` : 'Unassigned'} by ${esc(w.assignedBy)}, ${fmtDateTime(w.assignedAt)}.${w.workBy ? ` ${esc(work)} since ${fmtDateTime(w.workAt)} (${esc(w.workBy)}).` : ''}</p>` : ''}
+        <div class="row" style="margin-top:8px"><button class="btn small quiet" type="button" id="chg-stains" ${d.linked.status !== 'Open' ? `disabled title="Request ${esc(d.linked.number)} is ${esc(d.linked.status.toLowerCase())}"` : work === 'Done' ? 'disabled title="Set the work back to In progress to change the stains"' : ''}>Change stains…</button>
+          <span class="small muted">Replace a protocol, add a stain to this work, or remove one.</span></div>
       </div>
+      <div id="stain-edit-box"></div>
       <h2 class="section">Worksheet</h2><div id="worksheet"></div>` : ''}
     ${w.status === 'Declined' ? `<p class="note section">Declined by ${esc(w.declinedBy)} on ${fmtDateTime(w.declinedAt)}: ${esc(w.declineReason)}</p>` : ''}
     <details class="section" ${w.status === 'Declined' ? 'open' : ''}><summary><strong>The request as submitted</strong></summary>
@@ -243,6 +353,10 @@ export async function renderIhcRequest(app, id) {
     await ihcWorksheetTab($('#worksheet'), d.linked.id);
     $('#saveassign').addEventListener('click', (e) => act(e.currentTarget, async () => { await api('POST', '/api/ihc/requests/assign', { ids: [w.id], to: $('#assignto').value.trim() }); await renderIhcRequest(app, id); }, 'Assignment saved'));
     $$('[data-st]', app).forEach((b) => b.addEventListener('click', () => act(b, async () => { await api('POST', `/api/ihc/requests/${w.id}/work`, { status: b.dataset.st }); await renderIhcRequest(app, id); }, `Marked ${b.dataset.st.toLowerCase()}`)));
+    $('#chg-stains').addEventListener('click', () => {
+      stainEditor($('#stain-edit-box'), { w, stains: d.stains, meta, onSaved: () => renderIhcRequest(app, id), onCancel: () => { $('#stain-edit-box').innerHTML = ''; } });
+      $('#stain-edit-box').scrollIntoView({ block: 'start' });
+    });
   }
 }
 
@@ -265,7 +379,7 @@ export async function ihcWorksheetTab(box, requestId) {
       <h3 class="section">Stains</h3>
       <div class="panel" style="padding:6px 10px"><table class="t">${STAIN_HEAD}<tbody>${stainRows(d.stains)}</tbody></table></div>
       <h3 class="section">Blocks and slides</h3>
-      <table class="t"><thead><tr><th>PHL#</th><th>Organ or tissue</th><th>Block</th>${slides.map((s) => `<th>${esc(s)}</th>`).join('')}</tr></thead>
+      <table class="t"><thead><tr><th>MHL#</th><th>Organ or tissue</th><th>Block</th>${slides.map((s) => `<th>${esc(s)}</th>`).join('')}</tr></thead>
         <tbody>${d.blocks.map((b) => `<tr><td class="code">${esc(b.phl)}</td><td>${esc(b.tissue)}</td><td>${b.source ? `<a href="#/request/${b.source.requestId}">${esc(b.source.phl)}</a> <span class="muted small">from ${esc(b.source.requestNumber)}</span>` : esc(b.blockNo)}</td>${slides.map(() => '<td class="tick"><span class="box" aria-hidden="true"></span></td>').join('')}</tr>`).join('')}</tbody></table>
       <p class="small muted">Tick each slide when it is cut and stained. In production each slide gets its own barcode and is scanned at every step.</p>
     </div>`;

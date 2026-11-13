@@ -161,7 +161,7 @@ test('assigning cases, and the study and request summaries', () => {
   assert.ok(sum.tabulated.every((row) => Object.values(row.status).some((m) => m === '-' || m === '+')));
   assert.ok(sum.notRead.includes('Brain'));
   const csv = ok('GET', `/api/studies/${study.id}/pathology.csv`);
-  assert.match(csv.content, /^PHL,Animal,Group,Sex,Report status/);
+  assert.match(csv.content, /^MHL,Animal,Group,Sex,Report status/);
   const had = state.requests.find((r) => r.pi.last === 'Haddad');
   const rs = ok('GET', `/api/requests/${had.id}/pathology`);
   assert.deepEqual(rs.groupKeys, ['All']);

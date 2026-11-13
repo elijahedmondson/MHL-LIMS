@@ -69,7 +69,7 @@ export function panelWarnings({ assay, panelId, segmentation }, speciesCodes) {
   return out;
 }
 
-// The sections on a run, as typed: slides 1 and 2, each with PHL numbers; a PHL number on one slide only.
+// The sections on a run, as typed: slides 1 and 2, each with MHL numbers; an MHL number on one slide only.
 export function slidesProblems(slides) {
   const out = [];
   if (!Array.isArray(slides) || !slides.length) return ['Put at least one section on a slide.'];
@@ -78,7 +78,7 @@ export function slidesProblems(slides) {
   if (new Set(slides.map((s) => s.slot)).size < slides.length) out.push('Each slide has its own slot, 1 or 2.');
   for (const s of slides) {
     if (![1, 2].includes(s.slot)) out.push('A slide is slot 1 or 2.');
-    for (const id of s.subjectIds || []) { if (seen.has(id)) out.push('A PHL number can be on only one slide of a run.'); seen.add(id); }
+    for (const id of s.subjectIds || []) { if (seen.has(id)) out.push('An MHL number can be on only one slide of a run.'); seen.add(id); }
   }
   if (!seen.size) out.push('Put at least one section on a slide.');
   return [...new Set(out)];

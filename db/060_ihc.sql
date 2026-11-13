@@ -36,6 +36,15 @@ CREATE TABLE ihc.Assay (
     ControlTissue        nvarchar(600) NULL,
     Manufacturer         nvarchar(200) NULL,
     CatalogNumber        nvarchar(200) NULL,
+    -- Added in the LIMS at the IHC department's request; the export has no columns for them.
+    Clone                nvarchar(60)  NULL,              -- "N/A" for a polyclonal antibody or a kit
+    Host                 nvarchar(30)  NULL,
+    Clonality            nvarchar(20)  NULL CONSTRAINT CK_Assay_Clonality CHECK (Clonality IN (N'Monoclonal', N'Polyclonal', N'Not applicable')),
+    PlatformSet          nvarchar(20)  NULL CONSTRAINT CK_Assay_PlatformSet CHECK (PlatformSet IN (N'Manual', N'Leica Bond', N'Ventana')),   -- NULL = worked out from the text
+    ChromogenSet         nvarchar(20)  NULL CONSTRAINT CK_Assay_ChromogenSet CHECK (ChromogenSet IN (N'DAB', N'Red', N'DAB + Red', N'Fluorescent', N'X-gal')),
+    Visibility           nvarchar(10)  NOT NULL CONSTRAINT DF_Assay_Visibility DEFAULT (N'PUBLIC') CONSTRAINT CK_Assay_Visibility CHECK (Visibility IN (N'PUBLIC', N'INTERNAL')),
+    IsPreferred          bit           NOT NULL CONSTRAINT DF_Assay_IsPreferred DEFAULT (0),
+    Result               nvarchar(12)  NULL CONSTRAINT CK_Assay_Result CHECK (Result IN (N'WORKS', N'OPTIMIZING', N'FAILED')),   -- NULL = not recorded
     Kind                 nvarchar(10)  NOT NULL CONSTRAINT CK_Assay_Kind CHECK (Kind IN (N'IHC', N'OPAL', N'IF', N'TUNEL', N'BETA_GAL')),
     Plex                 int           NOT NULL CONSTRAINT DF_Assay_Plex DEFAULT (1) CONSTRAINT CK_Assay_Plex CHECK (Plex BETWEEN 1 AND 9),
     Chromogen            nvarchar(30)  NOT NULL CONSTRAINT DF_Assay_Chromogen DEFAULT (N'DAB'),

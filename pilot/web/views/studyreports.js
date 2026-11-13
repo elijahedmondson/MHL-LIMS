@@ -66,7 +66,7 @@ function necropsyHtml(rep) {
     ${groupsTable(rep, 'Necropsies approved', (k) => byGroup(k).filter((a) => a.necropsy === 'APPROVED').length)}
 
     <h2 class="rep-h">2. Animal disposition</h2>
-    <table class="t rep-t"><thead><tr><th>Group</th><th>Animal</th><th>PHL#</th><th>Sex</th><th>Necropsy</th><th>Fate</th><th class="n">Body weight (g)</th><th>Prosector</th></tr></thead><tbody>
+    <table class="t rep-t"><thead><tr><th>Group</th><th>Animal</th><th>MHL#</th><th>Sex</th><th>Necropsy</th><th>Fate</th><th class="n">Body weight (g)</th><th>Prosector</th></tr></thead><tbody>
       ${rep.keys.map((k) => byGroup(k).map((a, i) => `<tr${i === 0 ? ' class="grp-start"' : ''}><td>${i === 0 ? `<strong>${esc(k)}</strong>` : ''}</td><td>${esc(a.label)}</td><td class="code">${esc(a.phl)}</td><td>${esc(a.sex)}</td>
         <td>${a.necropsy === 'APPROVED' ? fmtDate(a.date) : `<span class="muted">${a.necropsy === 'DRAFT' ? 'Draft' : 'Not done'}</span>`}</td><td class="small">${esc(a.fate)}${a.condition ? `<br>${esc(a.condition)}` : ''}</td>
         <td class="n">${a.necropsy === 'APPROVED' && a.bodyWeight != null ? a.bodyWeight : ''}</td><td>${esc(a.necropsy === 'APPROVED' ? a.prosector : '')}</td></tr>`).join('')).join('')}

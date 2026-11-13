@@ -17,8 +17,9 @@ public sealed record AssayDerivation(AssayClassification Classification, IReadOn
 /// A port of pilot/core/ihc.mjs; tests/MhlLims.Domain.Tests/Golden checks both give the same answers.
 /// </summary>
 /// <remarks>
-/// The patterns use RegexOptions.ECMAScript so that \b, \w, \d and \s behave as in the JavaScript original
-/// (ASCII only), which keeps results identical for names such as "ERα" or "CD79α".
+/// The patterns use RegexOptions.ECMAScript so that \b, \w and \d behave as in the JavaScript original (ASCII only),
+/// which keeps results identical for names such as "ERα" or "CD79α". \s differs (JavaScript also matches Unicode spaces),
+/// so Classify turns non-breaking spaces into spaces first, as the JavaScript does.
 /// </remarks>
 public static class IhcCatalogRules
 {
@@ -134,7 +135,17 @@ public static class IhcCatalogRules
 
     // ---------- kind of assay ----------
 
-    private static readonly Regex Fluorescent = Js(@"alexa|fitc|\bcy[235]\b|texas red|dylight|\bpe\b|rhodamine|tritc|red 549|\bsa-af\d", ignoreCase: true);
+    // Named dyes, or a fluorophore wavelength after a dye family ("AF 594", "CF647") or an anti-something secondary ("anti-HRP 594").
+    private static readonly Regex Fluorescent = Js(@"alexa|fitc|\bcy[235]\b|texas red|dylight|\bpe\b|rhodamine|tritc|red 549|\bsa-af\d|\b(?:af|cf|atto|ifluor)\s?-?\s?(?:350|405|430|488|514|532|546|555|568|594|610|633|647|660|680|700|750|790)\b|\banti-?\s?[a-z0-9]+[\s-](?:405|488|546|555|568|594|633|647|660|680|750)\b", ignoreCase: true);
+    // An overnight primary ("1:2000 ONRT", "ON 4C", "o/n") is a manual stain even with BOND or Ventana reagents.
+    private static readonly Regex OvernightWords = Js(@"\b(?:o\/n|onrt|on\s?rt|overnight)\b", ignoreCase: true);
+    private static readonly Regex OvernightOn = Js(@"\bON(?:\b|\d)");   // "ON", "ON 4C", "ON4C"
+    private static readonly Regex ManualWord = Js(@"\bmanual\b", ignoreCase: true);
+    public static bool IsOvernight(string? dilution) => OvernightWords.IsMatch(dilution ?? string.Empty) || OvernightOn.IsMatch(dilution ?? string.Empty);
+
+    /// <summary>Platforms and chromogens the IHC team can set by hand on an assay (they win over the guess from the text).</summary>
+    public static readonly IReadOnlyList<string> Platforms = new[] { "Manual", "Leica Bond", "Ventana" };
+    public static readonly IReadOnlyList<string> Chromogens = new[] { "DAB", "Red", "DAB + Red", "Fluorescent", "X-gal" };
     private static readonly Regex OpalWord = Js("opal", ignoreCase: true);
     private static readonly Regex OpalFluorophore = Js(@"\b(480|520|540|570|620|650|690|780)\b");
     private static readonly Regex Duplex = Js(@"^duplex\b", ignoreCase: true);
@@ -148,21 +159,25 @@ public static class IhcCatalogRules
     private static readonly Regex RedChromogen = Js("refine red|fast red|permanent red|vector red", ignoreCase: true);
 
     /// <summary>What kind of assay a protocol is, how many markers it has, and how it is detected.</summary>
-    public static AssayClassification Classify(string? name, string? kit)
+    public static AssayClassification Classify(string? name, string? kit, string? dilution = null)
     {
-        var n = name ?? string.Empty;
-        var k = kit ?? string.Empty;
+        // Non-breaking spaces count as spaces (ECMAScript-mode \s is ASCII-only in .NET, unlike JavaScript's).
+        var n = (name ?? string.Empty).Replace('\u00A0', ' ');
+        var k = (kit ?? string.Empty).Replace('\u00A0', ' ');
+        dilution = dilution?.Replace('\u00A0', ' ');
+        var byHand = IsOvernight(dilution) || ManualWord.IsMatch(k);
         // Opal fluorophores are written "OPAL 520", "OPAL520" or "OPALs 690, 520, 570"; count the distinct ones.
         var opal = OpalWord.IsMatch(k) ? Math.Max(1, OpalFluorophore.Matches(k).Select(m => m.Value).Distinct().Count()) : 0;
         var nPlex = NPlex.Match(n);
         var namePlex = Duplex.IsMatch(n) ? 2 : Triplex.IsMatch(n) ? 3 : nPlex.Success ? int.Parse(nPlex.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
         // A 4- to 6-plex panel is always fluorescent here, even when the kit column does not say so.
+        var platform = byHand ? "Manual" : Bond.IsMatch(k) ? "Leica Bond" : Ventana.IsMatch(k) ? "Ventana" : "Manual";
         if (namePlex >= 4 && opal == 0)
-            return new AssayClassification(AssayKind.Opal, namePlex, "Opal", Bond.IsMatch(k) ? "Leica Bond" : "Manual");
-        var platform = Bond.IsMatch(k) ? "Leica Bond" : Ventana.IsMatch(k) ? "Ventana" : "Manual";
-        if (Tunel.IsMatch(n)) return new AssayClassification(AssayKind.Tunel, 1, "DAB", platform);
-        if (BetaGal.IsMatch(n)) return new AssayClassification(AssayKind.BetaGal, 1, "X-gal", platform);
+            return new AssayClassification(AssayKind.Opal, namePlex, "Opal", platform == "Ventana" ? "Manual" : platform);
         var fluorescent = Fluorescent.IsMatch(k) || Fluorescent.IsMatch(n);
+        // A TUNEL assay may be named for its target and only name the kit ("ApopTag kit anti-DIG 647").
+        if (Tunel.IsMatch(n) || Tunel.IsMatch(k)) return new AssayClassification(AssayKind.Tunel, 1, fluorescent ? "Fluorescent" : "DAB", platform);
+        if (BetaGal.IsMatch(n)) return new AssayClassification(AssayKind.BetaGal, 1, "X-gal", platform);
         if (namePlex >= 2 || opal >= 2)
         {
             var plex = Math.Max(namePlex, opal);
@@ -175,22 +190,45 @@ public static class IhcCatalogRules
         return new AssayClassification(AssayKind.Ihc, 1, RedChromogen.IsMatch(k) ? "Red" : "DAB", platform);
     }
 
-    public static string KindLabel(AssayKind kind, int plex) => kind switch
+    public static string KindLabel(AssayKind kind, int plex, string? chromogen = null) => kind switch
     {
         AssayKind.Opal => plex > 1 ? $"Opal {plex}-plex" : "Opal (1 marker)",
         AssayKind.If => plex > 1 ? $"IF {plex}-plex" : "Immunofluorescence",
         AssayKind.Ihc => plex > 1 ? $"IHC {plex}-plex" : "IHC",
-        AssayKind.Tunel => "TUNEL",
+        AssayKind.Tunel => chromogen == "Fluorescent" ? "TUNEL (fluorescent)" : "TUNEL",
         AssayKind.BetaGal => "β-gal",
         _ => kind.ToString(),
     };
 
-    public static bool IsFluorescent(AssayKind kind) => kind is AssayKind.Opal or AssayKind.If;
+    /// <summary>A fluorescent TUNEL counts too: it is scanned on the Akoya system and has no chromogen to choose.</summary>
+    public static bool IsFluorescent(AssayKind kind, string? chromogen = null) => kind is AssayKind.Opal or AssayKind.If || chromogen == "Fluorescent";
 
-    public static AssayDerivation Derive(string? name, string? kit, string? species, string? fixative)
+    /// <summary>
+    /// Platform and chromogen set by hand win over the guess from the text. Choosing Fluorescent for an IHC protocol
+    /// makes it immunofluorescence (and the reverse), which changes how it is priced and scanned. Mirrors applyDetection
+    /// in pilot/core/ihc.mjs.
+    /// </summary>
+    public static AssayClassification ApplyDetection(AssayClassification c, string? platformSet, string? chromogenSet)
+    {
+        var kind = c.Kind; var chromogen = c.Chromogen;
+        var platform = platformSet is not null && Platforms.Contains(platformSet) ? platformSet : c.Platform;
+        if (chromogenSet is not null && Chromogens.Contains(chromogenSet))
+        {
+            if (kind == AssayKind.Opal) { if (chromogenSet != "Fluorescent") { kind = AssayKind.Ihc; chromogen = chromogenSet; } }
+            else
+            {
+                chromogen = chromogenSet;
+                if (chromogenSet == "Fluorescent" && kind == AssayKind.Ihc) kind = AssayKind.If;
+                else if (chromogenSet != "Fluorescent" && kind == AssayKind.If) kind = AssayKind.Ihc;
+            }
+        }
+        return new AssayClassification(kind, c.Plex, chromogen, platform);
+    }
+
+    public static AssayDerivation Derive(string? name, string? kit, string? species, string? fixative, string? dilution = null, string? platformSet = null, string? chromogenSet = null)
     {
         var sp = SpeciesTags(species);
-        return new AssayDerivation(Classify(name, kit), sp.Tags, sp.Other, FixativeTags(fixative));
+        return new AssayDerivation(ApplyDetection(Classify(name, kit, dilution), platformSet, chromogenSet), sp.Tags, sp.Other, FixativeTags(fixative));
     }
 
     /// <summary>
@@ -199,7 +237,7 @@ public static class IhcCatalogRules
     /// </summary>
     public static void ApplyDerived(Assay assay)
     {
-        var d = Derive(assay.Name, assay.DetectionKit, assay.Species, assay.Fixative);
+        var d = Derive(assay.Name, assay.DetectionKit, assay.Species, assay.Fixative, assay.Dilution, assay.PlatformSet, assay.ChromogenSet);
         if (!assay.IsDoubleStain)
         {
             assay.Kind = d.Classification.Kind;
@@ -207,6 +245,7 @@ public static class IhcCatalogRules
             assay.Chromogen = d.Classification.Chromogen;
             assay.Platform = d.Classification.Platform;
         }
+        else if (assay.PlatformSet is not null && Platforms.Contains(assay.PlatformSet)) assay.Platform = assay.PlatformSet;
         assay.SpeciesTags = d.SpeciesTags.Select(t => new AssaySpeciesTag { AssayId = assay.Id, Tag = t }).ToList();
         assay.FixativeTags = d.FixativeTags.Select(t => new AssayFixativeTag { AssayId = assay.Id, Tag = t }).ToList();
     }

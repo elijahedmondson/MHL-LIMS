@@ -1,4 +1,4 @@
-// Molecular > Xenium: PHL numbers waiting in the Xenium work area, planning a run (two Xenium slides), assigning it, and
+// Molecular > Xenium: MHL numbers waiting in the Xenium work area, planning a run (two Xenium slides), assigning it, and
 // following it step by step to data delivery. Rules and lists are in core/xenium.mjs.
 import { $, $$, api, esc, fmtDate, fmtDateTime, getMeta, act, pageTop, options, navigate } from '../ui.js';
 import * as XEN from '../lib/xenium.mjs';
@@ -19,22 +19,22 @@ export async function renderXenium(app) {
   const runs = d.runs.filter((r) => listState.runs === 'all' || r.active);
   app.innerHTML = `
     ${ihcTabs('xenium', meta)}
-    <p class="muted" style="max-width:900px">10x Genomics Xenium runs. PHL numbers moved to the Xenium work area wait here. Plan a run of up to ${XEN.SLIDES_PER_RUN} Xenium slides, assign it, and record each step; when the data are delivered the PHL numbers move on to their next work area. The CY2027 price list has no Xenium charge code, so runs make no charges in the pilot.</p>
-    <h2 class="section">Waiting for a run <span class="small muted" style="font-weight:400">${d.queue.length} PHL number${d.queue.length === 1 ? '' : 's'}</span></h2>
+    <p class="muted" style="max-width:900px">10x Genomics Xenium runs. MHL numbers moved to the Xenium work area wait here. Plan a run of up to ${XEN.SLIDES_PER_RUN} Xenium slides, assign it, and record each step; when the data are delivered the MHL numbers move on to their next work area. The CY2027 price list has no Xenium charge code, so runs make no charges in the pilot.</p>
+    <h2 class="section">Waiting for a run <span class="small muted" style="font-weight:400">${d.queue.length} MHL number${d.queue.length === 1 ? '' : 's'}</span></h2>
     ${d.queue.length ? `<table class="t">
-      <thead><tr><th><input type="checkbox" id="all" aria-label="Select all"></th><th>PHL#</th><th>Sample</th><th>Request</th><th>Investigator</th><th>Material</th><th>In Xenium since</th><th>Due</th></tr></thead>
+      <thead><tr><th><input type="checkbox" id="all" aria-label="Select all"></th><th>MHL#</th><th>Sample</th><th>Request</th><th>Investigator</th><th>Material</th><th>In Xenium since</th><th>Due</th></tr></thead>
       <tbody>${d.queue.map((q) => `<tr>
         <td class="mid"><input type="checkbox" class="sel" value="${q.subjectId}" aria-label="Select ${esc(q.phl)}"></td>
         <td class="code">${esc(q.phl)}${q.priority === 'S' ? ' <span class="badge stat">STAT</span>' : ''}</td><td>${esc(q.label)}</td>
         <td><a class="idtxt" href="#/request/${q.requestId}">${esc(q.requestNumber)}</a></td><td>${esc(q.investigator)}</td><td>${esc(q.speciesName)}</td>
         <td>${fmtDate(q.since)}</td><td>${q.due && q.due < meta.today ? `<span class="overdue">${fmtDate(q.due)}</span>` : fmtDate(q.due)}</td></tr>`).join('')}</tbody></table>
-      <div class="actions"><button class="btn" type="button" id="plan">Plan a run with the selected PHL numbers</button></div>
+      <div class="actions"><button class="btn" type="button" id="plan">Plan a run with the selected MHL numbers</button></div>
       <div id="planbox"></div>`
-    : '<p class="empty">Nothing waiting. Move PHL numbers to the Xenium work area on their request when their sections are ready.</p>'}
+    : '<p class="empty">Nothing waiting. Move MHL numbers to the Xenium work area on their request when their sections are ready.</p>'}
     <div class="row section"><h2 style="margin:0">Runs</h2><span class="spacer"></span>
       <div class="filters" role="group" aria-label="Show runs" style="margin:0">${[['active', 'In progress'], ['all', 'All']].map(([k, l]) => `<button type="button" data-runs="${k}" aria-pressed="${k === listState.runs}">${l}</button>`).join('')}</div></div>
     ${runs.length ? `<table class="t section">
-      <thead><tr><th>Run</th><th>Step</th><th>Assay and panel</th><th>PHL numbers</th><th>Requests</th><th>Assigned to</th><th>Last step</th></tr></thead>
+      <thead><tr><th>Run</th><th>Step</th><th>Assay and panel</th><th>MHL numbers</th><th>Requests</th><th>Assigned to</th><th>Last step</th></tr></thead>
       <tbody>${runs.map((r) => `<tr>
         <td><a class="idtxt" href="#/molecular/xenium/run/${r.id}">${esc(r.number)}</a></td>
         <td>${statusBadge(r.status)}<br>${progress(r.status)}</td>
@@ -49,7 +49,7 @@ export async function renderXenium(app) {
   $('#all')?.addEventListener('change', (e) => { $$('.sel', app).forEach((c) => { c.checked = e.target.checked; }); });
   $('#plan')?.addEventListener('click', () => {
     const picked = $$('.sel:checked', app).map((c) => d.queue.find((q) => q.subjectId === Number(c.value)));
-    if (!picked.length) { $('#planbox').innerHTML = '<p class="note">Tick the PHL numbers to put on the run.</p>'; return; }
+    if (!picked.length) { $('#planbox').innerHTML = '<p class="note">Tick the MHL numbers to put on the run.</p>'; return; }
     planForm($('#planbox'), meta, picked, d.staff);
   });
 }
@@ -69,7 +69,7 @@ function planForm(box, meta, picked, staff) {
         <div class="field"><label><input type="checkbox" id="xseg"> Multimodal cell segmentation staining</label></div>
       </div>
       <h3 class="section">Slides</h3>
-      <table class="t"><thead><tr><th>PHL#</th><th>Sample</th><th>Request</th><th>Material</th><th>Slide</th></tr></thead>
+      <table class="t"><thead><tr><th>MHL#</th><th>Sample</th><th>Request</th><th>Material</th><th>Slide</th></tr></thead>
         <tbody>${picked.map((q, i) => `<tr><td class="code">${esc(q.phl)}</td><td>${esc(q.label)}</td><td>${esc(q.requestNumber)}</td><td>${esc(q.speciesName)}</td>
           <td><select data-slot="${q.subjectId}" class="inp" style="width:auto" aria-label="Slide for ${esc(q.phl)}">${options([[1, 'Slide 1'], [2, 'Slide 2']], i % 2 === 0 || picked.length === 1 ? 1 : 2)}</select></td></tr>`).join('')}</tbody></table>
       <div class="form" style="grid-template-columns:1fr 1fr 2fr;max-width:none;margin-top:10px">
@@ -125,7 +125,7 @@ export async function renderXeniumRun(app, id) {
           <div class="form" style="grid-template-columns:1fr 2fr;max-width:none">
             <div class="field"><label for="adate">Date</label><input id="adate" type="date" value="${meta.today}" max="${meta.today}"></div>
             <div class="field"><label for="anote">Note</label><input id="anote" maxlength="300"></div>
-            ${d.next === 'DELIVERED' ? '<div class="field full"><label><input type="checkbox" id="amove" checked> Move the PHL numbers on to their next work area</label></div>' : ''}
+            ${d.next === 'DELIVERED' ? '<div class="field full"><label><input type="checkbox" id="amove" checked> Move the MHL numbers on to their next work area</label></div>' : ''}
           </div>
           <div class="actions"><button class="btn" type="submit">Mark done</button>${x.status !== 'PLANNED' ? '<button class="btn quiet" type="button" id="back">Undo the last step</button>' : ''}
             <button class="btn quiet" type="button" id="endrun">Failed or cancelled…</button></div>
@@ -139,7 +139,7 @@ export async function renderXeniumRun(app, id) {
         <h2 class="section">Slides</h2>
         ${d.slides.map((sl, i) => `<h3>Slide ${sl.slot}</h3>
           <div class="field" style="max-width:320px"><label for="ser${i}" class="small">Xenium slide serial number</label><input id="ser${i}" class="inp" data-serial="${i}" maxlength="40" value="${esc(sl.slideSerial)}" ${active ? '' : 'disabled'}></div>
-          <table class="t"><thead><tr><th>PHL#</th><th>Sample</th><th>Request</th><th>Material</th><th>Where now</th></tr></thead><tbody>
+          <table class="t"><thead><tr><th>MHL#</th><th>Sample</th><th>Request</th><th>Material</th><th>Where now</th></tr></thead><tbody>
             ${sl.sections.map((s) => `<tr><td class="code">${esc(s.phl)}</td><td>${esc(s.label)}</td><td><a class="idtxt" href="#/request/${s.requestId}">${esc(s.requestNumber)}</a><br><span class="small muted">${esc(s.investigator)}</span></td><td>${esc(s.species)}</td><td class="small">${esc((meta.areas.find((a) => a.code === s.area) || {}).name || s.area)}</td></tr>`).join('')}
           </tbody></table>`).join('')}
         ${active ? '<div class="actions noprint"><button class="btn small quiet" type="button" id="saveser">Save serial numbers</button></div>' : ''}
@@ -174,7 +174,7 @@ export async function renderXeniumRun(app, id) {
   $('#advance')?.addEventListener('submit', (e) => {
     e.preventDefault();
     act(e.submitter, async () => { const r = await api('POST', `/api/xenium/runs/${id}/advance`, { date: $('#adate').value, note: $('#anote').value, moveOn: $('#amove') ? $('#amove').checked : undefined }); await reload(); return r; },
-      (r) => `${XEN.stepLabel(r.status)}${r.moved.length ? `; ${r.moved.length} PHL number${r.moved.length === 1 ? '' : 's'} moved on` : ''}`);
+      (r) => `${XEN.stepLabel(r.status)}${r.moved.length ? `; ${r.moved.length} MHL number${r.moved.length === 1 ? '' : 's'} moved on` : ''}`);
   });
   $('#back')?.addEventListener('click', (e) => act(e.currentTarget, async () => { await api('POST', `/api/xenium/runs/${id}/back`, {}); await reload(); }, 'Last step undone'));
   $('#endrun')?.addEventListener('click', () => { $('#endform').hidden = false; $('#ereason').focus(); });

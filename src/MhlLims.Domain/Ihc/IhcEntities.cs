@@ -20,6 +20,12 @@ public enum IhcImportance { Routine, Stat }
 public enum SampleType { Fixed, Frozen, Block, Slides }
 
 /// <summary>One validated protocol: antibody, dilution, retrieval, detection, controls.</summary>
+/// <summary>Public: investigators can request it. Internal: MHL staff only.</summary>
+public enum AssayVisibility { Public, Internal }
+
+/// <summary>Whether the protocol works, as recorded by the IHC team.</summary>
+public enum AssayResult { Works, Optimizing, Failed }
+
 public class Assay : IHasModifiedBy
 {
     public int Id { get; set; }
@@ -34,7 +40,17 @@ public class Assay : IHasModifiedBy
     public string? Manufacturer { get; set; }
     public string? CatalogNumber { get; set; }
 
-    // Derived from the text fields by IhcCatalogRules.Derive; stored so they can be queried.
+    // Added in the LIMS at the IHC department's request (the IHC database export has no columns for them).
+    public string? Clone { get; set; }               // "N/A" for a polyclonal antibody or a kit
+    public string? Host { get; set; }                // Rabbit, Mouse, ... or "Not applicable"
+    public string? Clonality { get; set; }           // Monoclonal, Polyclonal, Not applicable
+    public string? PlatformSet { get; set; }         // set by hand; null = worked out from the text
+    public string? ChromogenSet { get; set; }        // set by hand; null = worked out from the text
+    public AssayVisibility Visibility { get; set; } = AssayVisibility.Public;
+    public bool IsPreferred { get; set; }
+    public AssayResult? Result { get; set; }         // null = not recorded
+
+    // Derived from the text fields (and PlatformSet / ChromogenSet) by IhcCatalogRules.Derive; stored so they can be queried.
     public AssayKind Kind { get; set; } = AssayKind.Ihc;
     public int Plex { get; set; } = 1;
     public string Chromogen { get; set; } = "DAB";

@@ -1,5 +1,5 @@
 // Whole-slide imaging for the pilot: the four scanners, reading what they write (image file headers, never the
-// pixels), finding the PHL number and block or slide in a file's barcode or name, and the scan charge.
+// pixels), finding the MHL number and block or slide in a file's barcode or name, and the scan charge.
 //
 // The scanners do not take orders from a LIMS. What they share is that each reads the slide's barcode label and saves
 // an image file to an output folder: Aperio AT2 and GT 450 write .svs (TIFF with an "Aperio" ImageDescription:
@@ -190,13 +190,13 @@ export async function readSlideFile({ name, size, readAt, readText = null, resol
 }
 
 // ---------- which slide is it ----------
-// Slide IDs as the LIMS prints them: PHL# then optional block and slide, e.g. 26000305A-B2-S01, 26000305A_B2,
+// Slide IDs as the LIMS prints them: MHL# then optional block and slide, e.g. 26000305A-B2-S01, 26000305A_B2,
 // 26000305A-S03. Anything left after them (HE, CD8, Scan1) is kept as a hint of the stain.
 const NOISE = /^(scan\d*|fl|qptiff|svs|copy|\d{4,}|\d{1,2}x|x\d{1,2}|ht|at2|gt450)$/i;
 const DATE8 = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
 export function parseSlideId(text) {
   const t = String(text || '').toUpperCase().replace(/\.(SVS|AFI|QPTIFF|TIFF?)$/i, '');
-  // Every 8-digit run: one with the PHL letter wins, and a date (20261105) loses to anything else.
+  // Every 8-digit run: one with the MHL-number letter wins, and a date (20261105) loses to anything else.
   const found = [...t.matchAll(/(?:^|[^0-9])(\d{8})([A-Z])?(?=$|[^0-9])/g)];
   if (!found.length) return null;
   const m = found.find((x) => x[2]) || found.find((x) => !DATE8.test(x[1])) || found[0];
@@ -213,7 +213,7 @@ export function parseSlideId(text) {
 }
 
 // The slide ID in the barcode, slide ID, internal file name or file name, in that order. With exists(id), the first
-// that names a known PHL number wins, so a stray number in a barcode does not hide a good file name.
+// that names a known MHL number wins, so a stray number in a barcode does not hide a good file name.
 export function slideIdOf(info, exists = null) {
   let first = null;
   for (const [from, v] of [['barcode', info.barcode], ['slide ID', info.slideId], ['internal name', info.internalName], ['file name', info.fileName]]) {

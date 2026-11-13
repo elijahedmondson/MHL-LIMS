@@ -1,11 +1,11 @@
-// Printable label sheet for a request: one request label plus one jar label per PHL number.
+// Printable label sheet for a request: one request label plus one jar label per MHL number.
 import { $, api, esc, code128Svg, pageTop, subjectLabel } from '../ui.js';
 
 export async function renderLabels(app, id) {
   const d = await api('GET', `/api/requests/${id}`);
   const r = d.request;
   const labels = [
-    { value: r.number, l2: `${r.piName}${d.nas ? `, NAS# ${d.nas.number}` : ''}`, l3: `${d.subjects.length} PHL numbers` },
+    { value: r.number, l2: `${r.piName}${d.nas ? `, NAS# ${d.nas.number}` : ''}`, l3: `${d.subjects.length} MHL numbers` },
     ...d.subjects.map((s) => ({ value: s.phl, l2: `${r.number}, ${r.pi.last}`, l3: `${d.study ? `${d.study.zap}, ` : ''}${subjectLabel(s)}${s.groupCode ? `, ${s.groupCode}` : ''}` })),
   ];
   app.innerHTML = `

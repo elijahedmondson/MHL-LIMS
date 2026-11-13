@@ -4,10 +4,10 @@ using MhlLims.Domain.Common;
 namespace MhlLims.Domain.Ihc;
 
 /// <summary>The parts of an assay the request rules need.</summary>
-public sealed record AssayView(int Id, string Name, AssayKind Kind, int Plex, AssayStatus Status, IReadOnlyList<string> SpeciesTags, IReadOnlyList<string> FixativeTags)
+public sealed record AssayView(int Id, string Name, AssayKind Kind, int Plex, AssayStatus Status, IReadOnlyList<string> SpeciesTags, IReadOnlyList<string> FixativeTags, string? Chromogen = null)
 {
     public static AssayView From(Assay a) =>
-        new(a.Id, a.Name, a.Kind, a.Plex, a.Status, a.SpeciesTags.Select(t => t.Tag).ToList(), a.FixativeTags.Select(t => t.Tag).ToList());
+        new(a.Id, a.Name, a.Kind, a.Plex, a.Status, a.SpeciesTags.Select(t => t.Tag).ToList(), a.FixativeTags.Select(t => t.Tag).ToList(), a.Chromogen);
 }
 
 public sealed record NewAntibodyDraft(string Name, bool Supplied);
@@ -129,7 +129,7 @@ public static class IhcRequestRules
             foreach (var (stain, assay) in stains)
             {
                 foreach (var c in StainCodes(stain, assay)) Add(c.Section, c.Code, c.PerSlide);
-                if (assay is not null && IhcCatalogRules.IsFluorescent(assay.Kind)) fluorescent++; else bright++;
+                if (assay is not null && IhcCatalogRules.IsFluorescent(assay.Kind, assay.Chromogen)) fluorescent++; else bright++;
             }
             if (draft.Scan20x) Add("IMAGE", "HP001006", bright);
             if (draft.Scan40x) Add("IMAGE", "HP001007", bright);
@@ -148,7 +148,7 @@ public static class IhcRequestRules
             else if (assay is { Kind: AssayKind.If })
                 Assume($"{assay.Name}: non-Opal immunofluorescence has no code of its own, so it is estimated as HP006004 per slide.");
         }
-        if (scanning && stains.Any(s => s.Assay is not null && IhcCatalogRules.IsFluorescent(s.Assay.Kind)))
+        if (scanning && stains.Any(s => s.Assay is not null && IhcCatalogRules.IsFluorescent(s.Assay.Kind, s.Assay.Chromogen)))
             Assume("Fluorescent slides are scanned on the Akoya system (HP001009) instead of the Aperio.");
         if (draft.Importance == IhcImportance.Stat) Assume("STAT: the CY2027 list has no STAT surcharge code, so none is estimated.");
 

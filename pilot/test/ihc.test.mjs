@@ -116,11 +116,11 @@ test('the request form: validation, estimate, warnings and submission', () => {
   assert.match(err('POST', '/api/ihc/requests', draft({ stains: [{ newAntibody: { name: 'XYZ' } }] })), /manufacturer/);
 });
 
-test('accepting a request creates a LIMS request with PHL numbers; declining needs a reason', () => {
+test('accepting a request creates a LIMS request with MHL numbers; declining needs a reason', () => {
   const { ok, err, state, call } = setup();
   const okafor = state.ihcRequests.find((w) => w.requester.last === 'Okafor');
   const detail = ok('GET', `/api/ihc/requests/${okafor.id}`);
-  assert.equal(detail.matches.length, 4, 'the lung blocks are already PHL numbers from ZAP2215');
+  assert.equal(detail.matches.length, 4, 'the lung blocks are already MHL numbers from ZAP2215');
   assert.ok(detail.matches.every((m) => m.studyZap === 'ZAP2215'));
 
   // A closed NAS request makes the whole accept fail and change nothing.
@@ -213,13 +213,13 @@ test('data saved before the IHC module gets the catalog on start-up', () => {
   const core = createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T09:00:00` }, save: () => { saved++; } });
   assert.equal(old.assays.length, ihcCatalog.assays.length);
   assert.deepEqual(old.ihcRequests, []);
-  assert.equal(old.version, 7);   // every later upgrade runs too
+  assert.equal(old.version, 8);   // every later upgrade runs too
   assert.deepEqual(old.pathology, {});
-  assert.equal(saved, 5);   // the catalog, the pathology module, and the version-5, 6 and 7 stamps
+  assert.equal(saved, 6);   // the catalog, the pathology module, and the version-5, 6, 7 and 8 stamps
   assert.equal(core.handle('GET', '/api/meta').json.ihc.catalog.entries, ihcCatalog.assays.length);
 });
 
-test('blocks already at MHL keep a link to their original PHL number', () => {
+test('blocks already at MHL keep a link to their original MHL number', () => {
   const { ok, state } = setup();
   const okafor = state.ihcRequests.find((w) => w.requester.last === 'Okafor');
   const res = ok('POST', `/api/ihc/requests/${okafor.id}/accept`, {});

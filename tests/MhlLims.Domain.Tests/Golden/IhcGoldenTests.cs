@@ -53,7 +53,7 @@ public class IhcGoldenTests
     public void Every_protocol_in_the_catalog_is_classified_the_same()
     {
         var mismatches = G.Classify
-            .Select(c => (c, r: IhcCatalogRules.Classify(c.Name, c.Kit)))
+            .Select(c => (c, r: IhcCatalogRules.Classify(c.Name, c.Kit, c.Dilution)))
             .Where(x => x.r.Kind != GoldenData.Kind(x.c.Kind) || x.r.Plex != x.c.Plex || x.r.Chromogen != x.c.Chromogen || x.r.Platform != x.c.Platform)
             .Select(x => $"{x.c.Name}: expected {x.c.Kind} {x.c.Plex} {x.c.Chromogen} {x.c.Platform}, got {x.r.Kind} {x.r.Plex} {x.r.Chromogen} {x.r.Platform}")
             .ToList();
@@ -64,7 +64,19 @@ public class IhcGoldenTests
     [Fact]
     public void Kind_labels_match()
     {
-        foreach (var c in G.KindLabel) Assert.Equal(c.Label, IhcCatalogRules.KindLabel(GoldenData.Kind(c.Kind), c.Plex));
+        foreach (var c in G.KindLabel) Assert.Equal(c.Label, IhcCatalogRules.KindLabel(GoldenData.Kind(c.Kind), c.Plex, c.Chromogen));
+    }
+
+    /// <summary>Platform and chromogen set by hand on an assay win over the guess from the text.</summary>
+    [Fact]
+    public void Platform_and_chromogen_set_by_hand_apply_the_same()
+    {
+        Assert.NotEmpty(G.ApplyDetection);
+        foreach (var c in G.ApplyDetection)
+        {
+            var r = IhcCatalogRules.ApplyDetection(new AssayClassification(GoldenData.Kind(c.Kind), 1, c.Chromogen, c.Platform), c.PlatformSet, c.ChromogenSet);
+            Assert.Equal((GoldenData.Kind(c.Result.Kind), c.Result.Plex, c.Result.Chromogen, c.Result.Platform), (r.Kind, r.Plex, r.Chromogen, r.Platform));
+        }
     }
 
     [Theory, MemberData(nameof(FitCases))]

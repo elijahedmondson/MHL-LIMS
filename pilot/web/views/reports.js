@@ -15,7 +15,7 @@ function header(r, title, draft) {
     </div>
     <div class="rep-pilot">Pilot with test data: not a valid report</div>
     <table class="rep-facts"><tbody>
-      <tr><th>PHL#</th><td class="code">${esc(s.phl)}</td><th>Animal or sample</th><td>${esc(s.label)}${[s.strain, s.genotype].filter(Boolean).length ? `<br><span class="small">${esc([s.strain, s.genotype].filter(Boolean).join(', '))}</span>` : ''}${s.dob ? `<br><span class="small">Born ${fmtDate(s.dob)}</span>` : s.age ? `<br><span class="small">Age ${esc(s.age)}</span>` : ''}</td><th>Species</th><td>${esc(s.species)}</td></tr>
+      <tr><th>MHL#</th><td class="code">${esc(s.phl)}</td><th>Animal or sample</th><td>${esc(s.label)}${[s.strain, s.genotype].filter(Boolean).length ? `<br><span class="small">${esc([s.strain, s.genotype].filter(Boolean).join(', '))}</span>` : ''}${s.dob ? `<br><span class="small">Born ${fmtDate(s.dob)}</span>` : s.age ? `<br><span class="small">Age ${esc(s.age)}</span>` : ''}</td><th>Species</th><td>${esc(s.species)}</td></tr>
       <tr><th>Study</th><td>${st ? `${esc(st.zap)}<br><span class="small">${esc(st.title)}</span>` : 'None'}</td><th>Group</th><td>${r.group ? `${esc(r.group.code)} ${esc(r.group.name)}${r.group.treatment ? `<br><span class="small">${esc(r.group.treatment)}</span>` : ''}` : esc(s.groupCode || 'None')}</td><th>Sex</th><td>${s.sex === 'F' ? 'Female' : s.sex === 'M' ? 'Male' : 'Not recorded'}</td></tr>
       <tr><th>Investigator</th><td>${esc(r.request.piName)}${r.request.inst ? `<br><span class="small">${esc(r.request.inst)}</span>` : ''}</td><th>Request</th><td>${esc(r.request.number)}<br><span class="small">${esc(r.request.type)}</span></td><th>ACUC protocol</th><td>${esc(st?.acuc || 'Not recorded')}</td></tr>
       ${n ? `<tr><th>Necropsy</th><td>${fmtDate(n.date)}, prosector ${esc(n.prosector)}</td><th>Fate</th><td>${esc(n.fate)}<br><span class="small">${esc(n.condition)}</span></td><th>Body weight</th><td>${n.bodyWeight != null ? `${n.bodyWeight} g` : 'Not recorded'}</td></tr>` : ''}
@@ -143,7 +143,7 @@ export function wireSummary(box) {
 
 export function casesTable(sum) {
   const groups = sum.groupKeys.some((g) => g !== 'All');
-  return `<table class="t"><thead><tr><th>PHL#</th><th>Animal or sample</th>${groups ? '<th>Group</th>' : ''}<th>Pathologist</th><th>Report</th><th></th></tr></thead><tbody>
+  return `<table class="t"><thead><tr><th>MHL#</th><th>Animal or sample</th>${groups ? '<th>Group</th>' : ''}<th>Pathologist</th><th>Report</th><th></th></tr></thead><tbody>
     ${sum.cases.map((c) => `<tr><td class="code">${esc(c.phl)}</td><td>${esc(c.label)}</td>${groups ? `<td>${esc(c.group)}${c.sex ? ` (${esc(c.sex)})` : ''}</td>` : ''}<td>${esc(c.pathologist || '')}</td>
       <td><span class="badge ${c.status === 'SIGNED' ? 'complete' : c.status === 'DRAFT' ? 'warn' : c.status === 'WAITING' ? 'muted' : ''}">${{ SIGNED: 'Signed out', DRAFT: 'Draft', WAITING: 'Waiting for necropsy', NOT_STARTED: 'Not started' }[c.status]}${c.version > 1 ? ` v${c.version}` : ''}</span>${c.signedAt ? `<br><span class="small muted">${fmtDate(c.signedAt.slice(0, 10))}</span>` : ''}</td>
       <td class="mid"><div class="rowbtns">${c.status === 'WAITING' ? '' : `<a class="btn small quiet" href="#/pathology/${c.id}">${c.status === 'SIGNED' ? 'Case' : c.status === 'DRAFT' ? 'Continue' : 'Start'}</a>`}${c.status === 'SIGNED' ? `<a class="btn small quiet" href="#/report/${c.id}/pathology">Report</a>` : ''}</div></td></tr>`).join('')}

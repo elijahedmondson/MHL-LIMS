@@ -37,7 +37,7 @@ test('seed data is consistent', () => {
   assert.ok(released.every((c) => c.batchId === b.id));
   assert.equal(Math.round(released.reduce((a, c) => a + c.amount, 0) * 100) / 100, b.total);
   const phls = state.subjects.map((s) => s.phl);
-  assert.equal(new Set(phls).size, phls.length, 'PHL numbers are unique');
+  assert.equal(new Set(phls).size, phls.length, 'MHL numbers are unique');
   assert.ok(phls.every((p) => /^\d{8}[A-Z]$/.test(p)));
   assert.equal(Object.values(state.necropsies).filter((n) => n.status === 'APPROVED').length, 12);
   assert.equal(state.nas.filter((n) => !n.requestId).length, 3);
@@ -55,7 +55,7 @@ test('search finds requests by every identifier', () => {
   assert.deepEqual(ok('GET', '/api/search', null, { q: 'x' }).hits, []);
 });
 
-test('intake creates a request, PHL numbers and a study from an approved NAS request', () => {
+test('intake creates a request, MHL numbers and a study from an approved NAS request', () => {
   const { ok, err, state } = setup();
   const nas = ok('POST', '/api/nas', { requesterLast: 'Tester', requesterFirst: 'Ana', authorized: 3000, type: 'NECRO-FULL', n: 5, species: 'MOUSE', description: 'Test' }).nas;
   assert.match(nas.number, /^26-\d{4}$/);
@@ -77,7 +77,7 @@ test('intake creates a request, PHL numbers and a study from an approved NAS req
   assert.equal(study.trimProtocolId, 2);
   const subjects = state.subjects.filter((s) => s.requestId === r.id);
   assert.ok(subjects.every((s) => s.area === 'ENTRY' && s.priority === 'S' && s.studyId === study.id));
-  // consecutive PHL numbers after the seeded ones
+  // consecutive MHL numbers after the seeded ones
   const nums = res.phls.map((p) => Number(p.slice(2, 8)));
   assert.deepEqual(nums, nums.map((_, i) => nums[0] + i));
   // A NAS request can fund another request (say the main study after a pilot) until it is closed.
@@ -98,7 +98,7 @@ test('a failed change leaves the data untouched', () => {
 });
 
 // Note: a failed change restores a copy of the data, so tests look records up again after one.
-test('moves are tracked and a request completes only when every PHL# is complete', () => {
+test('moves are tracked and a request completes only when every MHL# is complete', () => {
   const { ok, err, state } = setup();
   const scan = () => state.requests.find((x) => x.type === 'SCAN');
   const r = scan();
@@ -207,7 +207,7 @@ test('study summary: weights, relative weights, incidence and CSV', () => {
   assert.ok(d.incidence.some((r) => r.organ === 'Lungs' && r.morphology === 'Nodule' && r.byGroup.G1 === 4));
   const csv = ok('GET', `/api/studies/${study.id}/export.csv`);
   assert.equal(csv.name, 'ZAP2215-animal-data.csv');
-  assert.match(csv.content.split('\r\n')[0], /^PHL,Animal,Group,Sex,Necropsy status,Necropsy date,Body weight \(g\),Brain \(g\)/);
+  assert.match(csv.content.split('\r\n')[0], /^MHL,Animal,Group,Sex,Necropsy status,Necropsy date,Body weight \(g\),Brain \(g\)/);
   assert.equal(csv.content.trim().split('\r\n').length, 13);
 });
 

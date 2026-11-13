@@ -1,4 +1,4 @@
-// New request: approved NAS request -> request details and study -> stains and IHC -> estimate -> create, PHL numbers and labels.
+// New request: approved NAS request -> request details and study -> stains and IHC -> estimate -> create, MHL numbers and labels.
 // Requests from the IHC web form are reviewed and accepted here too (ihcviews.renderIhcReview), so every new request
 // starts in this tab. A NAS request can fund several requests (a pilot and then the main study) until it is closed.
 import { $, $$, api, esc, money, fmtDate, addDays, getMeta, getPriceList, sectionName, act, pageTop, options, code128Svg, zplJar, subjectLabel, kindBadge, saveFile, toast } from '../ui.js';
@@ -6,6 +6,7 @@ import { loadCatalog, estimateLine, summarizeEstimate } from '../lib/rules.mjs';
 import * as ANIMALS from '../lib/animallist.mjs';
 import { writeXlsx, XLSX_TYPE } from '../lib/xlsxwrite.mjs';
 import { readSheets } from '../lib/sheets.mjs';
+import { codingBadges } from './assays.js';
 
 const STEPS = ['Choose NAS request', 'Request details', 'Stains and IHC', 'Estimate', 'Create and label'];
 let wiz = null;
@@ -70,7 +71,7 @@ async function stepNas(app, box, meta) {
     ${shut.length ? `<div class="queue section">${shut.map(card).join('')}</div>` : ''}
     ${closed ? `<p class="small"><button class="btn small quiet" type="button" id="showclosed">${showClosed ? 'Hide' : 'Show'} ${closed} closed NAS request${closed === 1 ? '' : 's'}</button></p>` : ''}
     <h2 class="section">IHC requests from the web form${waiting.length ? ` <span class="badge warn">${waiting.length} to review</span>` : ''}</h2>
-    <p class="muted" style="max-width:900px">Requests investigators send from the IHC request form (the old phlrequest site). Review one, then accept it to create a request with PHL numbers and an estimate, or decline it with a reason. Accepted requests are assigned and worked under Molecular.</p>
+    <p class="muted" style="max-width:900px">Requests investigators send from the IHC request form (the old phlrequest site). Review one, then accept it to create a request with MHL numbers and an estimate, or decline it with a reason. Accepted requests are assigned and worked under Molecular.</p>
     ${waiting.length ? `<table class="t">
       <thead><tr><th>Request</th><th>Submitted</th><th>Investigator</th><th class="n">Blocks</th><th>Stains</th><th class="n">Estimate</th><th>Check</th><th></th></tr></thead>
       <tbody>${waiting.map((r) => `<tr>
@@ -90,7 +91,7 @@ async function stepNas(app, box, meta) {
         <div class="field"><label for="np">Project number</label><input id="np" maxlength="30" placeholder="e.g. 25X0012345.01"></div>
         <div class="field"><label for="na">Authorized amount ($)</label><input id="na" type="number" min="1" step="0.01" required></div>
         <div class="field"><label for="nt">Request type</label><select id="nt">${options(types, 'NECRO-FULL')}</select></div>
-        <div class="field"><label for="nc">PHL numbers needed (animals, cases or samples)</label><input id="nc" type="number" min="1" max="500" value="10" required></div>
+        <div class="field"><label for="nc">MHL numbers needed (animals, cases or samples)</label><input id="nc" type="number" min="1" max="500" value="10" required></div>
         <div class="field"><label for="ns">Species or material</label><select id="ns">${options(Object.entries(meta.species).map(([k, v]) => [k, v.name]), 'MOUSE')}</select></div>
         <div class="field full"><label for="nd">Description of the work</label><textarea id="nd" maxlength="1000"></textarea></div>
         <div class="full"><button class="btn quiet" type="submit">Add NAS request</button></div>
@@ -124,7 +125,7 @@ async function stepDetails(app, box, meta) {
       <div class="field"><span class="lbl">NAS# and project</span><div class="ro">${esc(wiz.nas.number)}, ${esc(wiz.nas.project || 'no project')}<span class="src">from NAS</span></div></div>
       <div class="field full"><span class="lbl">Description</span><div class="ro" style="font-weight:400">${esc(wiz.nas.description)}</div></div>
       <div class="field"><label for="type">Request type</label><select id="type">${options(Object.entries(meta.requestTypes).map(([k, v]) => [k, v.name]), wiz.type)}</select></div>
-      <div class="field"><label for="n">Number of PHL numbers (one per animal, case or sample)</label><input id="n" type="number" min="1" max="500" value="${wiz.animals ? wiz.animals.length : wiz.n}" ${wiz.animals ? 'disabled title="Set by the animal list"' : ''}>${wiz.animals ? '<span class="small muted">From the animal list below</span>' : ''}</div>
+      <div class="field"><label for="n">Number of MHL numbers (one per animal, case or sample)</label><input id="n" type="number" min="1" max="500" value="${wiz.animals ? wiz.animals.length : wiz.n}" ${wiz.animals ? 'disabled title="Set by the animal list"' : ''}>${wiz.animals ? '<span class="small muted">From the animal list below</span>' : ''}</div>
       <div class="field"><label for="species">Species or material</label><select id="species">${options(Object.entries(meta.species).map(([k, v]) => [k, v.name]), wiz.species)}</select></div>
       <div class="field"><label for="priority">Priority</label><select id="priority">${options([['R', 'Routine'], ['P', 'Priority'], ['S', 'STAT']], wiz.priority)}</select></div>
       <div class="field"><label for="fixative">Fixative</label><select id="fixative">${options([['10%NBF', '10% neutral buffered formalin'], ['4%PFA', '4% paraformaldehyde'], ['FRESH', 'Fresh or unfixed'], ['OTHER', 'Other']], wiz.fixative)}</select></div>
@@ -151,7 +152,7 @@ async function stepDetails(app, box, meta) {
       <div class="row"><h2 style="margin:0">Animal list</h2><span class="small muted">optional</span><span class="spacer"></span>
         <button class="btn small quiet" type="button" id="altemplate">Download the template (.xlsx)</button>
         <label class="btn small" for="alfile" style="cursor:pointer">Read the investigator's spreadsheet</label><input type="file" id="alfile" accept=".xlsx,.xls,.csv,.txt" hidden></div>
-      <p class="small muted" style="margin:6px 0 0">One line per animal: ID, group, sex, strain, genotype, date of birth, cage, treatment, priority and notes. Excel (.xlsx or .xls) or CSV; the investigator's own layout is fine if it has an animal ID column. The request then has one PHL number per animal, in the list's order, each with its details; the groups become the study's groups.</p>
+      <p class="small muted" style="margin:6px 0 0">One line per animal: ID, group, sex, strain, genotype, date of birth, cage, treatment, priority and notes. Excel (.xlsx or .xls) or CSV; the investigator's own layout is fine if it has an animal ID column. The request then has one MHL number per animal, in the list's order, each with its details; the groups become the study's groups.</p>
       <div id="alpreview"></div>
     </section>
     <div class="actions"><button class="btn quiet" type="button" id="back">Back</button><button class="btn" type="button" id="next">Continue to estimate</button></div>`;
@@ -230,7 +231,7 @@ function wireAnimalList(app, box, meta, readForm) {
           ${cols.map((c) => `<td class="${c.key === 'label' ? 'code' : 'small'}">${esc(c.key === 'priority' ? (a.priority === 'S' ? 'STAT' : a.priority === 'P' ? 'Priority' : '') : c.key === 'dob' && /^\d{4}-\d\d-\d\d$/.test(a.dob) ? fmtDate(a.dob) : a[c.key])}</td>`).join('')}
           <td class="small">${a.problems.map((x) => `<span class="fitnote">${esc(x)}</span>`).join('<br>')}</td></tr>`).join('')}</tbody></table></div>` : ''}
       <div class="actions">
-        ${wiz.animals ? `<span class="badge complete">In use: ${wiz.animals.length} PHL numbers from this list</span>` : `<button class="btn" type="button" id="aluse" ${p.problems.length || !p.animals.length ? 'disabled' : ''}>Use these ${s.count} animals</button>`}
+        ${wiz.animals ? `<span class="badge complete">In use: ${wiz.animals.length} MHL numbers from this list</span>` : `<button class="btn" type="button" id="aluse" ${p.problems.length || !p.animals.length ? 'disabled' : ''}>Use these ${s.count} animals</button>`}
         <button class="btn quiet" type="button" id="alclear">Remove the list</button></div>`;
     $('#aluse')?.addEventListener('click', () => {
       readForm();
@@ -238,7 +239,7 @@ function wireAnimalList(app, box, meta, readForm) {
       wiz.animalFile = wiz.animalSource.fileName;
       if (wiz.n !== wiz.animals.length) wiz.lines = null;
       wiz.n = wiz.animals.length;
-      toast(`${wiz.n} animals from ${wiz.animalFile}: the request will have ${wiz.n} PHL numbers`);
+      toast(`${wiz.n} animals from ${wiz.animalFile}: the request will have ${wiz.n} MHL numbers`);
       renderIntake(app);
     });
     $('#alclear').addEventListener('click', () => {
@@ -293,7 +294,8 @@ const ihcPayload = (ihc) => ({ ...ihc, he: ihc.addOn ? { on: false, perBlock: 1 
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 function antibodyLine(a) {
   const ab = a.antibody || {};
-  const bits = [ab.clone && `clone ${ab.clone}`, [ab.host, ab.clonality].filter(Boolean).join(' ').toLowerCase(), ab.isotype, ab.conjugate && `${ab.conjugate.toLowerCase()}-conjugated`].filter(Boolean);
+  const na = (x) => (x && x !== 'Not applicable' ? x : '');
+  const bits = [ab.clone ? `clone ${ab.clone}` : ab.cloneNotApplicable ? 'clone N/A' : '', [na(ab.host), na(ab.clonality)].filter(Boolean).join(' ').toLowerCase(), ab.isotype, ab.conjugate && `${ab.conjugate.toLowerCase()}-conjugated`].filter(Boolean);
   return bits.length ? bits.join(', ') : ab.several ? 'several antibodies; see the assay' : 'clone and host not recorded';
 }
 
@@ -306,7 +308,7 @@ async function stepIhc(app, box, meta) {
   box.innerHTML = `
     <p class="muted">${molec ? 'Choose the antibodies, probes or panels for this request from the MHL IHC catalog, with what is done on each block.'
       : 'Optional. Add IHC or special stains on the blocks this request makes; leave it empty if none are needed. These slides are estimated as extra sections from the same blocks.'}
-      Each of the ${wiz.n} PHL numbers gets every stain chosen here; the IHC team can adjust it per block on the worksheet.</p>
+      Each of the ${wiz.n} MHL numbers gets every stain chosen here; the IHC team can adjust it per block on the worksheet.</p>
     <div class="split wide-left">
       <div>
         <form class="form" id="ihcform" onsubmit="return false">
@@ -363,7 +365,7 @@ async function stepIhc(app, box, meta) {
   const drawChosen = () => {
     $('#ichosen').innerHTML = ihc.stains.length ? `<table class="t"><tbody>${ihc.stains.map((s, i) => {
       const v = s.view || {};
-      const fluor = v.kind === 'Opal' || v.kind === 'IF';
+      const fluor = v.kind === 'Opal' || v.kind === 'IF' || v.chromogen === 'Fluorescent';
       return `<tr><td>${s.newAntibody ? `<strong>${esc(s.newAntibody.name)}</strong> <span class="badge warn">not in catalog</span><br><span class="small muted">${esc([s.newAntibody.host, s.newAntibody.manufacturer, s.newAntibody.catalog].filter(Boolean).join(', '))}</span>`
         : `<strong>${esc(v.name)}</strong> ${kindBadge(v)} <a class="small" href="#/molecular/assay/${s.assayId}" target="_blank" rel="noopener">#${s.assayId}</a><br><span class="small muted">${esc(antibodyLine(v))}</span>
           <br><span class="small muted">${esc(clip([`${v.manufacturer} ${v.catalog}`.trim(), v.dilution, v.platform].filter(Boolean).join(' · '), 120))}</span>${v.fit?.length ? `<br><span class="small fitnote">${esc(v.fit.join('; '))}</span>` : ''}`}</td>
@@ -380,8 +382,8 @@ async function stepIhc(app, box, meta) {
     const res = await api('GET', `/api/ihc/assays?q=${encodeURIComponent(q)}&limit=20&fitSpecies=${encodeURIComponent(species)}&fitFixative=${encodeURIComponent(fixative)}&fitTypes=${types}`);
     pending = res.assays;
     const picked = new Set(ihc.stains.map((s) => s.assayId));
-    $('#ifound').innerHTML = res.assays.length ? `<ul class="found-list">${res.assays.map((a, i) => `<li class="${a.fit.length ? 'misfit' : ''}">
-        <div><strong>${esc(a.name)}</strong> ${kindBadge(a)} <span class="small muted">#${a.id}</span><br><span class="small">${esc(antibodyLine(a))}</span>
+    $('#ifound').innerHTML = res.assays.length ? `<ul class="found-list">${res.assays.map((a, i) => `<li class="${a.fit.length || a.result === 'Failed' ? 'misfit' : ''}">
+        <div><strong>${esc(a.name)}</strong> ${kindBadge(a)} <span class="small muted">#${a.id}</span> ${codingBadges(a, { showWorks: false })}<br><span class="small">${esc(antibodyLine(a))}</span>
           <br><span class="small muted">${esc(clip([`${a.manufacturer} ${a.catalog}`.trim(), a.species || 'species not recorded', a.fixative, a.dilution].filter(Boolean).join(' · '), 150))}</span>
           ${a.fit.length ? `<br><span class="small fitnote">${esc(a.fit.join('; '))}</span>` : ''}</div>
         <div>${picked.has(a.id) ? '<span class="badge complete">Added</span>' : `<button class="btn small ${a.fit.length ? 'quiet' : ''}" type="button" data-pick="${i}">Add</button>`}</div></li>`).join('')}</ul>
@@ -424,7 +426,7 @@ async function stepEstimate(app, box, meta) {
   const phases = wiz.nas.estimatePhases || [];
   if (!wiz.lines) {
     // Where the lines start from: a phase of the estimate behind the NAS request, the NAS request's scope (if the type and
-    // number of PHL numbers match it), or the request type's usual lines.
+    // number of MHL numbers match it), or the request type's usual lines.
     const phase = phases.length > 1 && wiz.phase !== '(type)' ? phases.find((p) => p.name === wiz.phase) || null : null;
     const useScope = !phase && wiz.phase !== '(type)' && wiz.nas.scope?.length > 0 && (phases.length > 0 || (wiz.type === wiz.nas.type && wiz.n === wiz.nas.n));
     wiz.fromScope = phase ? 'phase' : !!useScope;
@@ -461,7 +463,7 @@ async function stepEstimate(app, box, meta) {
         <select id="phasepick" class="inp" style="width:auto">${options([...(phases.length > 1 ? phases.map((p) => [p.name, `Estimate ${wiz.nas.estimateLabel}: ${p.name}${others.some((r) => r.estimatePhase === p.name) ? ' (already used)' : ''}`]) : []),
           ...(wiz.nas.scope?.length ? [['(scope)', phases.length > 1 ? `All phases of estimate ${wiz.nas.estimateLabel}` : `Estimate ${wiz.nas.estimateLabel}`]] : []), ['(type)', 'The usual lines for the request type']],
           wiz.fromScope === 'phase' ? wiz.phase : wiz.fromScope ? '(scope)' : '(type)')}</select></div>` : ''}
-      <p class="muted">Suggested from ${wiz.fromScope === 'phase' ? `phase “${esc(wiz.phase)}” of estimate ${esc(wiz.nas.estimateLabel)}` : wiz.fromScope ? (wiz.nas.scopeFromEstimate ? `estimate ${esc(wiz.nas.estimateLabel)} (the scope of the NAS request)` : 'the scope in the NAS request') : 'the request type'}${ihcChosen(wiz.ihc) ? ', the stains chosen,' : ''} and ${wiz.n} PHL numbers, priced from the ${esc(pl.name)} list. Change units, remove lines or add codes. The total goes back to NAS as the initial cost estimate.</p>
+      <p class="muted">Suggested from ${wiz.fromScope === 'phase' ? `phase “${esc(wiz.phase)}” of estimate ${esc(wiz.nas.estimateLabel)}` : wiz.fromScope ? (wiz.nas.scopeFromEstimate ? `estimate ${esc(wiz.nas.estimateLabel)} (the scope of the NAS request)` : 'the scope in the NAS request') : 'the request type'}${ihcChosen(wiz.ihc) ? ', the stains chosen,' : ''} and ${wiz.n} MHL numbers, priced from the ${esc(pl.name)} list. Change units, remove lines or add codes. The total goes back to NAS as the initial cost estimate.</p>
       <div class="split wide-left">
         <div>
           <table class="t">
@@ -539,7 +541,7 @@ async function stepReview(app, box, meta) {
           <dt>Investigator</dt><dd>${esc(wiz.nas.requester.last)}${wiz.nas.requester.first ? `, ${esc(wiz.nas.requester.first)}` : ''}</dd>
           <dt>NAS#</dt><dd>${esc(wiz.nas.number)}</dd>
           <dt>Type</dt><dd>${esc(def.name)}${wiz.priority === 'S' ? ', STAT' : ''}</dd>
-          <dt>PHL numbers</dt><dd>${wiz.n}${wiz.animals ? ` <span class="muted">from the animal list ${esc(wiz.animalFile)}${(() => { const g = ANIMALS.groupsFromAnimals(wiz.animals); return g.length ? `: ${g.map((x) => esc(x.code)).join(', ')}` : ''; })()}</span>` : ''}</dd>
+          <dt>MHL numbers</dt><dd>${wiz.n}${wiz.animals ? ` <span class="muted">from the animal list ${esc(wiz.animalFile)}${(() => { const g = ANIMALS.groupsFromAnimals(wiz.animals); return g.length ? `: ${g.map((x) => esc(x.code)).join(', ')}` : ''; })()}</span>` : ''}</dd>
           <dt>Study</dt><dd>${s.mode === 'none' ? 'None' : s.mode === 'new' ? `New: ${esc(s.zap || 'next ZAP#')} ${esc(s.title)}` : 'Existing study'}</dd>
           <dt>Stains and IHC</dt><dd>${ihcChosen(wiz.ihc) ? esc([...wiz.ihc.stains.map((x) => (x.view ? `${x.view.name}${x.view.antibody?.clone ? ` (${x.view.antibody.clone})` : ''}` : x.newAntibody.name)),
     !wiz.ihc.addOn && wiz.ihc.he.on ? `H&E x${wiz.ihc.he.perBlock}` : '', wiz.ihc.unstained.on ? `unstained x${wiz.ihc.unstained.perBlock}` : ''].filter(Boolean).join(', ')) + ' on each block' : 'None'}</dd>
@@ -548,11 +550,11 @@ async function stepReview(app, box, meta) {
         <h3 class="section">Request number</h3>
         <div class="checks" style="flex-direction:column;align-items:flex-start;gap:6px" id="rnmode">
           <label><input type="radio" name="rnmode" value="auto" ${wiz.numberMode !== 'manual' ? 'checked' : ''}> Next number: <strong class="code" id="rnnext">…</strong></label>
-          <label><input type="radio" name="rnmode" value="manual" ${wiz.numberMode === 'manual' ? 'checked' : ''}> Enter the number by hand, for example a PHL.exe request ID</label>
+          <label><input type="radio" name="rnmode" value="manual" ${wiz.numberMode === 'manual' ? 'checked' : ''}> Enter the number by hand, for example a request ID from PHL.exe (the old tracking system)</label>
         </div>
         <div class="field" style="max-width:280px;margin-top:6px"><label for="rnum" class="small">Request number</label><input id="rnum" maxlength="12" value="${esc(wiz.manualNumber || '')}" placeholder="e.g. 270333" style="text-transform:uppercase" ${wiz.numberMode === 'manual' ? '' : 'disabled'}></div>
         <p class="small" id="rncheck" aria-live="polite"></p>
-        <p class="note info">Creating the request issues the PHL numbers from a counter that never hands out the same number twice, and accessions every PHL number. An automatic request number comes from the same kind of counter; a number entered by hand is checked against every request first.</p>
+        <p class="note info">Creating the request issues the MHL numbers from a counter that never hands out the same number twice, and accessions every MHL number. An automatic request number comes from the same kind of counter; a number entered by hand is checked against every request first.</p>
       </div>
       <div>
         <h2>Estimate lines</h2>
@@ -560,7 +562,7 @@ async function stepReview(app, box, meta) {
           <tr class="total"><td colspan="3">Estimate</td><td class="n">${money(wiz.total)}</td></tr></tbody></table>
       </div>
     </div>
-    <div class="actions"><button class="btn quiet" type="button" id="back">Back</button><button class="btn" type="button" id="create">Create request and PHL numbers</button></div>`;
+    <div class="actions"><button class="btn quiet" type="button" id="back">Back</button><button class="btn" type="button" id="create">Create request and MHL numbers</button></div>`;
   $('#back').addEventListener('click', () => { wiz.step = 3; renderIntake(app); });
   // Request number: the next automatic number, or one typed by hand and checked as it is typed.
   api('GET', `/api/requests/next-number?type=${encodeURIComponent(wiz.type)}`)
@@ -613,14 +615,14 @@ export async function renderCreatedPage(app, requestId, { another = false } = {}
   const r = d.request;
   const phls = d.subjects.map((s) => s.phl).sort();
   const nasOpen = d.nas && !d.nas.closed;
-  const labels = [{ v: r.number, l2: `${r.piName}${d.nas ? `, NAS# ${d.nas.number}` : ''}`, l3: `${d.subjects.length} PHL numbers` },
+  const labels = [{ v: r.number, l2: `${r.piName}${d.nas ? `, NAS# ${d.nas.number}` : ''}`, l3: `${d.subjects.length} MHL numbers` },
     ...d.subjects.map((s) => ({ v: s.phl, l2: `${r.number}, ${r.pi.last}`, l3: subjectLabel(s) }))];
   let sel = Math.min(1, labels.length - 1);
   const draw = () => {
     app.innerHTML = `
       <div class="crumb"><a href="#/new">New request</a></div>
       <h1>Request ${esc(r.number)} created</h1>
-      <p>${d.subjects.length} PHL numbers, <strong>${esc(phls[0])}</strong> to <strong>${esc(phls.at(-1))}</strong>, are accessioned. ${d.nas ? `The estimate of ${money(r.estimateTotal)} is ready to send back to NAS# ${esc(d.nas.number)}${d.financials.nasRequests > 1 ? `, which now funds ${d.financials.nasRequests} requests` : ''}.` : 'Link a NAS request on the request page when the investigator has one.'}</p>
+      <p>${d.subjects.length} MHL numbers, <strong>${esc(phls[0])}</strong> to <strong>${esc(phls.at(-1))}</strong>, are accessioned. ${d.nas ? `The estimate of ${money(r.estimateTotal)} is ready to send back to NAS# ${esc(d.nas.number)}${d.financials.nasRequests > 1 ? `, which now funds ${d.financials.nasRequests} requests` : ''}.` : 'Link a NAS request on the request page when the investigator has one.'}</p>
       <div class="actions" style="margin-top:12px">
         <a class="btn" href="#/labels/${r.id}">Print labels</a>
         <a class="btn" href="#/tracking/${r.id}">Print tracking sheet</a>

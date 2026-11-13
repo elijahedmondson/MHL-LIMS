@@ -40,7 +40,7 @@ export async function renderStudy(app, id, view) {
       </div>
       <div>
         <h2>Animals</h2>
-        <table class="t"><thead><tr><th>PHL#</th><th>Animal</th><th>Group</th><th>Sex</th><th>Where</th><th>Necropsy</th><th>Pathology</th></tr></thead><tbody>
+        <table class="t"><thead><tr><th>MHL#</th><th>Animal</th><th>Group</th><th>Sex</th><th>Where</th><th>Necropsy</th><th>Pathology</th></tr></thead><tbody>
           ${d.animals.map((a) => `<tr>
             <td class="code"><a href="#/necropsy/${a.id}">${esc(a.phl)}</a> ${a.priority === 'S' ? '<span class="badge stat">STAT</span>' : ''}</td><td>${esc(a.label)}</td>
             <td><select class="inp" data-g="${a.id}" aria-label="Group for ${esc(a.phl)}">${options(s.groups.map((g) => [g.code, g.code]), a.groupCode, { blank: 'None' })}</select></td>

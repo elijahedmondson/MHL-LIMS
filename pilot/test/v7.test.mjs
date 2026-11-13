@@ -130,7 +130,7 @@ test('accepted IHC requests are assigned and worked; submitted and declined ones
 });
 
 // ---------- Molecular: Xenium ----------
-test('a Xenium run is planned from the queue, goes step by step, and on delivery moves its PHL numbers on', () => {
+test('a Xenium run is planned from the queue, goes step by step, and on delivery moves its MHL numbers on', () => {
   const t = fresh();
   let x = t.call('GET', '/api/xenium');
   assert.deepEqual(x.queue.map((q) => q.label), ['ORG-3 (passage P10)'], 'two organoid lines are on the seeded run');
@@ -184,7 +184,7 @@ test('a failed Xenium run returns its sections to the queue; panels are checked 
 });
 
 // ---------- request tabs ----------
-test('every request has a Necropsy tab summary: status, prosector, weights and findings for each PHL number', () => {
+test('every request has a Necropsy tab summary: status, prosector, weights and findings for each MHL number', () => {
   const t = fresh();
   const bre = t.state.requests.find((r) => r.number === 'HP260101');
   const n = t.call('GET', `/api/requests/${bre.id}/necropsy`);
@@ -256,7 +256,7 @@ test('saved data from version 6 upgrades: NAS requests open, Xenium runs, study 
   for (const s of old.studies) delete s.reportNotes;
   for (const w of old.ihcRequests) { delete w.workStatus; delete w.assignedTo; }
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 7);
+  assert.equal(old.version, 8);
   assert.deepEqual(old.xenium, { runs: [] });
   // A NAS request whose requests are all complete has served its purpose and is closed; the rest stay open.
   const done = (n) => { const reqs = old.requests.filter((r) => r.nasId === n.id); return reqs.length > 0 && reqs.every((r) => r.status === 'Complete'); };

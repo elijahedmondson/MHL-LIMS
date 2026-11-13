@@ -1,4 +1,4 @@
-// Request page. Every request has the same tabs in the same order: Overview (journey, PHL numbers, moves), Labels,
+// Request page. Every request has the same tabs in the same order: Overview (journey, MHL numbers, moves), Labels,
 // Estimate, Necropsy, Bloodwork, Pathology, Slide images, Charges and History; a tab that does not apply says so. An IHC
 // order's bench worksheet is under Molecular.
 import { $, $$, api, esc, money, fmtDate, fmtDateTime, getMeta, getPriceList, areaName, sectionName, statusBadge, act, pageTop, options, code128Svg, subjectLabel, animalDetails } from '../ui.js';
@@ -34,7 +34,7 @@ export async function renderRequest(app, id, tab) {
       <span>${esc(r.piName)}</span>
       <span>Received <b>${fmtDate(r.received)}</b></span>
       <span>${r.completed ? `Completed <b>${fmtDate(r.completed)}</b>` : `Due <b class="${r.due < meta.today ? 'overdue' : ''}">${fmtDate(r.due)}${r.due < meta.today ? ' (overdue)' : ''}</b>`}</span>
-      <span>${d.subjects.length} PHL numbers</span>
+      <span>${d.subjects.length} MHL numbers</span>
     </div>
     <nav class="subtabs" aria-label="Request sections">
       ${tabs.map(([k, label]) => `<a href="#/request/${r.id}/${k}" ${k === tab ? 'aria-current="page"' : ''} class="${applies[k] === false ? 'na' : ''}" ${applies[k] === false ? 'title="Not part of this request"' : ''}>${label}${k === 'charges' && pending ? `<span class="count" title="Charges waiting for billing QC">${pending}</span>` : ''}</a>`).join('')}
@@ -58,7 +58,7 @@ function journey(d, meta) {
   const track = d.track;
   const pos = (code) => { const i = track.findIndex((a) => a.code === code); return i < 0 ? 0 : ((i + 0.5) / track.length) * 100; };
   return `
-    <section class="journey pre" aria-label="Where each PHL number is">
+    <section class="journey pre" aria-label="Where each MHL number is">
       <div class="journey-grid" style="grid-template-columns: 124px repeat(${track.length}, minmax(60px, 1fr));">
         <div></div>${track.map((a) => `<div class="j-head">${esc(a.name)}</div>`).join('')}
         ${d.subjects.map((s) => `
@@ -138,11 +138,11 @@ function overviewTab(box, d, meta, reload) {
           ${r.numberEnteredByHand ? `<dt>Request number</dt><dd>${esc(r.number)} <span class="muted small">entered by hand at intake</span></dd>` : ''}
           ${r.animalList ? `<dt>Animal list</dt><dd>${r.animalList.animals} animals${r.animalList.fileName ? ` from ${esc(r.animalList.fileName)}` : ''} <span class="muted small">read by ${esc(r.animalList.by)}, ${fmtDateTime(r.animalList.at)}</span></dd>` : ''}
         </dl>
-        ${r.status === 'Open' ? `<div class="actions"><button class="btn quiet" id="complete" type="button" ${allComplete ? '' : 'disabled title="Every PHL number must reach Complete first"'}>Complete request</button>
+        ${r.status === 'Open' ? `<div class="actions"><button class="btn quiet" id="complete" type="button" ${allComplete ? '' : 'disabled title="Every MHL number must reach Complete first"'}>Complete request</button>
           ${r.areas.includes('PATHO') ? '' : '<button class="btn quiet" id="addpath" type="button" title="Adds the Pathology work area so a pathologist can read and report these samples">Add pathology review</button>'}</div>` : ''}
       </div>
       <div>
-        <h2>PHL numbers</h2>
+        <h2>MHL numbers</h2>
         <div class="row" style="margin-bottom:8px">
           <label class="small muted" for="to">Move selected to</label>
           <select id="to" class="inp" style="width:auto">${options(d.track.map((a) => [a.code, a.name]), '')}</select>
@@ -150,7 +150,7 @@ function overviewTab(box, d, meta, reload) {
           <span class="small muted" id="selcount">0 selected</span>
         </div>
         <table class="t" id="subjects">
-          <thead><tr><th><input type="checkbox" id="all" aria-label="Select all"></th><th>PHL#</th><th>${d.study ? 'Animal' : d.webRequest ? 'Sample' : 'ID'}</th>${groups ? '<th>Group</th>' : ''}<th>Where</th><th>Since</th>${hasNecro ? '<th>Necropsy</th>' : ''}${r.areas.includes('PATHO') ? '<th>Pathology</th>' : ''}</tr></thead>
+          <thead><tr><th><input type="checkbox" id="all" aria-label="Select all"></th><th>MHL#</th><th>${d.study ? 'Animal' : d.webRequest ? 'Sample' : 'ID'}</th>${groups ? '<th>Group</th>' : ''}<th>Where</th><th>Since</th>${hasNecro ? '<th>Necropsy</th>' : ''}${r.areas.includes('PATHO') ? '<th>Pathology</th>' : ''}</tr></thead>
           <tbody>${d.subjects.map((s) => `
             <tr>
               <td class="mid"><input type="checkbox" class="sel" value="${s.id}" aria-label="Select ${esc(s.phl)}"></td>
@@ -230,7 +230,7 @@ async function chargesTab(box, d, meta, reload) {
           <div class="field" style="grid-column: span 2"><label for="code">Charge code</label><select id="code"></select></div>
           <div class="field"><label for="units">Units</label><input id="units" type="number" min="0.25" step="0.25" value="1"></div>
           <div class="field"><label for="date">Charge date</label><input id="date" type="date" value="${today}"></div>
-          <div class="field"><label for="subj">PHL# (optional)</label><select id="subj">${options(d.subjects.map((s) => [s.id, s.phl]), '', { blank: 'Whole request' })}</select></div>
+          <div class="field"><label for="subj">MHL# (optional)</label><select id="subj">${options(d.subjects.map((s) => [s.id, s.phl]), '', { blank: 'Whole request' })}</select></div>
           <div class="field full"><label for="note">Description of the work <span id="needs" class="small"></span></label><input id="note" maxlength="300" placeholder="Required for labor, reagent and custom stain codes"></div>
           <div class="full row"><button class="btn" type="submit">Add charge</button><span id="preview" class="muted"></span></div>
         </form>
@@ -341,7 +341,7 @@ function estimateTab(box, d, meta) {
 function labelsTab(box, d) {
   const r = d.request;
   box.innerHTML = `
-    <div class="row"><p class="muted" style="margin:0">One request label and one jar label per PHL number, and the paper tracking sheet staff fill in as the samples move through the lab.</p><span class="spacer"></span><a class="btn" href="#/labels/${r.id}">Open printable labels</a><a class="btn quiet" href="#/tracking/${r.id}">Tracking sheet</a></div>
+    <div class="row"><p class="muted" style="margin:0">One request label and one jar label per MHL number, and the paper tracking sheet staff fill in as the samples move through the lab.</p><span class="spacer"></span><a class="btn" href="#/labels/${r.id}">Open printable labels</a><a class="btn quiet" href="#/tracking/${r.id}">Tracking sheet</a></div>
     <div class="labels">${[{ v: r.number, l2: r.piName, l3: d.nas ? `NAS# ${d.nas.number}` : '' }, ...d.subjects.slice(0, 11).map((s) => ({ v: s.phl, l2: `${r.number}, ${r.pi.last}`, l3: subjectLabel(s) }))].map((l) => `
       <div class="label">${code128Svg(l.v)}<div class="l1">${esc(l.v)}</div><div class="l2">${esc(l.l2)}</div><div class="l2">${esc(l.l3)}</div></div>`).join('')}</div>
     ${d.subjects.length > 11 ? `<p class="muted">and ${d.subjects.length - 11} more.</p>` : ''}`;
@@ -362,14 +362,14 @@ async function pathologyTab(box, r, d, meta, reload) {
   const sum = await api('GET', `/api/requests/${r.id}/pathology`);
   box.innerHTML = `
     ${d.study ? `<div class="actions" style="margin-top:0"><a class="btn small" href="#/studyreport/${d.study.id}/pathology">Study pathology report (${esc(d.study.zap)})</a></div>` : ''}
-    <div class="row"><p class="muted" style="margin:0">One pathology case per PHL number. ${r.areas.includes('NECRO') ? 'Cases open when the necropsy is approved.' : 'Tissues are added from the submitted material.'}</p>
+    <div class="row"><p class="muted" style="margin:0">One pathology case per MHL number. ${r.areas.includes('NECRO') ? 'Cases open when the necropsy is approved.' : 'Tissues are added from the submitted material.'}</p>
       <span class="spacer"></span><a class="btn small quiet" href="#/pathology">Pathology worklist</a></div>
     <div class="section">${casesTable(sum)}</div>
     <section class="section" id="pathsum">${pathologySummaryHtml(sum, { csvPath: `/api/requests/${r.id}/pathology.csv`, scope: 'request', id: r.id, necropsy: r.areas.includes('NECRO') })}</section>`;
   wireSummary(box);
 }
 
-// Necropsy: every PHL number's necropsy, with the reports for the request and its study.
+// Necropsy: every MHL number's necropsy, with the reports for the request and its study.
 async function necropsyTab(box, d, meta) {
   const r = d.request;
   if (!r.areas.includes('NECRO')) { box.innerHTML = `${notPart('necropsy', 'Necropsy', r, meta)}${d.study ? `<p class="small"><a href="#/study/${d.study.id}">Study ${esc(d.study.zap)}</a></p>` : ''}`; return; }
@@ -380,7 +380,7 @@ async function necropsyTab(box, d, meta) {
       <a class="btn small quiet" href="#/necropsy">Necropsy worklist</a>
       ${n.approved ? `<a class="btn small quiet" href="#/reports/request/${r.id}/necropsy">Print approved necropsy reports</a>` : ''}
       ${d.study ? `<a class="btn small" href="#/studyreport/${d.study.id}/necropsy">Study necropsy report (${esc(d.study.zap)})</a><a class="btn small quiet" href="#/study/${d.study.id}">Study page</a>` : ''}</div>
-    <table class="t section"><thead><tr><th>PHL#</th><th>Animal</th>${n.groups ? '<th>Group</th>' : ''}<th>Necropsy</th><th>Date</th><th>Prosector</th><th>Fate</th><th class="n">Body weight (g)</th><th class="n">Organs collected</th><th class="n">Gross findings</th><th></th></tr></thead>
+    <table class="t section"><thead><tr><th>MHL#</th><th>Animal</th>${n.groups ? '<th>Group</th>' : ''}<th>Necropsy</th><th>Date</th><th>Prosector</th><th>Fate</th><th class="n">Body weight (g)</th><th class="n">Organs collected</th><th class="n">Gross findings</th><th></th></tr></thead>
       <tbody>${n.animals.map((a) => `<tr>
         <td class="code">${esc(a.phl)}${a.priority === 'S' ? ' <span class="badge stat">STAT</span>' : ''}</td><td>${esc(a.label)}</td>${n.groups ? `<td>${esc(a.groupCode || '')}${a.sex ? ` (${esc(a.sex)})` : ''}</td>` : ''}
         <td><span class="badge ${a.status === 'APPROVED' ? 'complete' : a.status === 'DRAFT' ? 'warn' : 'muted'}">${label[a.status]}</span></td>
@@ -391,12 +391,12 @@ async function necropsyTab(box, d, meta) {
 
 function bloodworkTab(box, d, applies = true) {
   const KIND = { HEMATOLOGY: 'Hematology', CHEMISTRY: 'Chemistry' };
-  if (!applies) { box.innerHTML = '<p class="empty">This request does not include bloodwork, and no results have been matched to its PHL numbers.</p>'; return KIND; }
+  if (!applies) { box.innerHTML = '<p class="empty">This request does not include bloodwork, and no results have been matched to its MHL numbers.</p>'; return KIND; }
   const byPhl = d.subjects.map((s) => ({ s, results: d.bloodwork.results.filter((x) => x.subjectId === s.id), cyto: d.bloodwork.cytology.filter((x) => x.subjectId === s.id) }));
   box.innerHTML = `
-    <div class="row"><p class="muted" style="margin:0">Hematology, chemistry and cytology for each PHL number. Results arrive under Bloodwork, are matched by PHL number, and count here once released.</p>
+    <div class="row"><p class="muted" style="margin:0">Hematology, chemistry and cytology for each MHL number. Results arrive under Bloodwork, are matched by MHL number, and count here once released.</p>
       <span class="spacer"></span><a class="btn small quiet" href="#/bloodwork">Bloodwork</a></div>
-    <table class="t section"><thead><tr><th>PHL#</th><th>Animal</th><th>Hematology</th><th>Chemistry</th><th>Cytology</th><th></th></tr></thead><tbody>
+    <table class="t section"><thead><tr><th>MHL#</th><th>Animal</th><th>Hematology</th><th>Chemistry</th><th>Cytology</th><th></th></tr></thead><tbody>
       ${byPhl.map(({ s, results, cyto }) => {
         const cell = (kind) => results.filter((x) => x.kind === kind).map((x) => `<a href="#/bloodwork/result/${x.id}">${fmtDate(x.testedOn)}</a> <span class="small muted">${x.status === 'RELEASED' ? 'released' : x.status.toLowerCase().replace('_', ' ')}${x.flagged ? `, ${x.flagged} flagged` : ''}</span>`).join('<br>') || '<span class="muted">—</span>';
         return `<tr><td class="code">${esc(s.phl)}</td><td>${esc(s.label)}</td><td>${cell('HEMATOLOGY')}</td><td>${cell('CHEMISTRY')}</td>
@@ -412,7 +412,7 @@ function historyTab(box, d, meta) {
     <div class="split even">
       <div>
         <h2>Tracking</h2>
-        <table class="t"><thead><tr><th>When</th><th>PHL#</th><th>Move</th><th>Who</th></tr></thead><tbody>
+        <table class="t"><thead><tr><th>When</th><th>MHL#</th><th>Move</th><th>Who</th></tr></thead><tbody>
           ${d.events.map((e) => `<tr><td>${fmtDateTime(e.at)}</td><td class="code">${esc(e.phl)}</td><td>${e.from ? `${esc(areaName(meta, e.from))} to ` : ''}${esc(areaName(meta, e.to))}${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ''}</td><td>${esc(e.by)}</td></tr>`).join('')}
         </tbody></table>
         ${d.events.length >= 60 ? '<p class="small muted">Showing the latest 60 moves.</p>' : ''}

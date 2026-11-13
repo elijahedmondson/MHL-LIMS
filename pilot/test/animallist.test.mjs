@@ -68,7 +68,7 @@ test('the list is checked: IDs needed and different, values readable, and what w
   assert.deepEqual(r.problems, ['Line 5: Sex “Q” should be F, M or U.', 'Line 5: The date of birth 2030-01-01 is in the future.', 'Line 5: Animal ID 3 is also on line 4.', 'Line 6: There is no animal ID.']);
   assert.equal(r.animals[0].groupCode, 'G1', 'the study\'s spelling of a group code');
   assert.ok(r.warnings.includes('Group G9 is not in the study yet and will be added to it.'));
-  assert.ok(r.warnings.includes('The NAS request is for 4 PHL numbers; the list has 5 animals, so the request will have 5.'));
+  assert.ok(r.warnings.includes('The NAS request is for 4 MHL numbers; the list has 5 animals, so the request will have 5.'));
   assert.ok(r.warnings.some((w) => /Group G1 lists 2 treatments/.test(w)));
   assert.ok(r.warnings.includes('Not read: the column “Weight”.'));
   assert.equal(r.animals.length, 5);
@@ -115,7 +115,7 @@ test('the template is a real workbook: request details on top, the headings, dro
 const animalsFor = (n, extra = (i) => ({})) => Array.from({ length: n }, (_, i) => ({ label: `M${100 + i}`, groupCode: i < n / 2 ? 'Ctl' : 'Tx', sex: i % 2 ? 'M' : 'F',
   strain: 'C57BL/6J', genotype: 'Kras', dob: '2026-06-01', age: '', cage: `C${i}`, treatment: i < n / 2 ? 'Vehicle' : 'Drug 10 mg/kg', priority: '', notes: '', ...extra(i) }));
 
-test('a request made from an animal list has one PHL number per animal, with its details, and the study gets the groups', () => {
+test('a request made from an animal list has one MHL number per animal, with its details, and the study gets the groups', () => {
   const t = fresh();
   const nas = t.state.nas.find((n) => n.requester.last === 'Abernathy');
   const animals = animalsFor(4, (i) => (i === 1 ? { priority: 'S', notes: 'Moribund' } : i === 3 ? { treatment: 'Drug 30 mg/kg' } : {}));
@@ -155,7 +155,7 @@ test('the core checks the animals again: count, IDs, values; human samples keep 
   const t = fresh();
   const nas = t.state.nas.find((n) => n.requester.last === 'Abernathy');
   const body = (animals, extra = {}) => ({ nasId: nas.id, type: 'HISTO', n: animals.length, species: 'MOUSE', study: { mode: 'none' }, lines: [{ section: 'TRIM_EMBED', code: 'HP003003', units: 2 }], animals, ...extra });
-  assert.match(t.fails('POST', '/api/requests', body(animalsFor(2), { n: 3 })), /3 PHL numbers but the animal list has 2/);
+  assert.match(t.fails('POST', '/api/requests', body(animalsFor(2), { n: 3 })), /3 MHL numbers but the animal list has 2/);
   assert.match(t.fails('POST', '/api/requests', body([...animalsFor(2), { label: 'm100' }])), /M100|m100.*twice/);
   assert.match(t.fails('POST', '/api/requests', body(animalsFor(2, () => ({ sex: 'X' })))), /Sex “X”/);
   assert.match(t.fails('POST', '/api/requests', body(animalsFor(1, () => ({ label: '' })))), /no animal ID/);

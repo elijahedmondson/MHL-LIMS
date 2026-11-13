@@ -14,7 +14,7 @@ export async function renderWorklist(app) {
             <div class="row"><a class="idtxt" href="#/request/${r.requestId}">${esc(r.number)}</a><span class="muted">${esc(r.pi)}</span><span class="spacer"></span>
               ${r.zap ? `<a href="#/study/${r.studyId}">${esc(r.zap)}</a>` : '<span class="badge warn">No study</span>'}<span class="small muted">${r.done} of ${r.total} done</span></div>
             ${r.studyTitle ? `<p class="small muted" style="margin:4px 0 8px">${esc(r.studyTitle)}</p>` : ''}
-            <table class="t"><thead><tr><th>PHL#</th><th>Animal</th><th>Group</th><th>Status</th><th></th></tr></thead><tbody>
+            <table class="t"><thead><tr><th>MHL#</th><th>Animal</th><th>Group</th><th>Status</th><th></th></tr></thead><tbody>
               ${r.subjects.map((s) => `<tr class="click" data-href="#/necropsy/${s.id}">
                 <td class="code">${esc(s.phl)} ${s.priority === 'S' ? '<span class="badge stat">STAT</span>' : ''}</td><td>${esc(s.label)}</td>
                 <td>${esc(s.groupCode || '')}${s.sex ? ` (${esc(s.sex)})` : ''}</td>

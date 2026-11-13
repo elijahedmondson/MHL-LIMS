@@ -163,10 +163,10 @@ export function formatPhlNumbers(firstValue, count, format, receivedIso, suffix 
   return Array.from({ length: count }, (_, i) => {
     const n = firstValue + i;
     if (format === 'Sequential') {
-      if (n > 99_999_999) throw new DomainError('The PHL number counter has exceeded eight digits.');
+      if (n > 99_999_999) throw new DomainError('The MHL number counter has exceeded eight digits.');
       return String(n).padStart(8, '0') + suffix;
     }
-    if (n > 999_999) throw new DomainError('More than 999,999 PHL numbers were requested in one year.');
+    if (n > 999_999) throw new DomainError('More than 999,999 MHL numbers were requested in one year.');
     return yy + String(n).padStart(6, '0') + suffix;
   });
 }

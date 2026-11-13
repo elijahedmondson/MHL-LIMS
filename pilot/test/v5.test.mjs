@@ -131,7 +131,7 @@ test('slide IDs are found in barcodes and file names; scan charges follow scanne
 });
 
 // ---------- registering and reviewing ----------
-test('sample files register against PHL numbers, skip repeats, and pick the scanner from its instrument ID', async () => {
+test('sample files register against MHL numbers, skip repeats, and pick the scanner from its instrument ID', async () => {
   const { state, call } = fresh();
   const files = [];
   for (const n of ['26000326A-S01.svs', '26000326A-S02.svs', '26000307A-B4-HE.svs', 'Slide_0042.svs', '26000306A-B2-IF.afi', '26000313A_Scan1.qptiff']) files.push(await readSample(n));
@@ -166,7 +166,7 @@ test('review: pass creates the scan charge, rescan needs a reason, reopen voids 
   assert.equal(call('POST', `/api/wsi/images/${lost.id}/link`, { link: 'https://halolink.example.org/image/123' }).image.link, 'https://halolink.example.org/image/123');
 });
 
-test('the scan queue suggests the scanner; scanning done moves PHL numbers on once their images are reviewed', () => {
+test('the scan queue suggests the scanner; scanning done moves MHL numbers on once their images are reviewed', () => {
   const { state, call, fails } = fresh();
   const q = call('GET', '/api/wsi').queue;
   const zap = q.find((x) => x.zap === 'ZAP2215'); const pdx = q.find((x) => x.fluorescent); const box = q.find((x) => x.mag === 40);
@@ -182,7 +182,7 @@ test('the scan queue suggests the scanner; scanning done moves PHL numbers on on
   assert.match(state.events.filter((e) => e.subjectId === subject('26000326A').id).at(-1).note, /without a registered image/);
 });
 
-test('an image of a slide still in staining moves its PHL number to Scan; scanners are edited with checks', async () => {
+test('an image of a slide still in staining moves its MHL number to Scan; scanners are edited with checks', async () => {
   const { state, call, fails } = fresh();
   const s314 = state.subjects.find((s) => s.phl === '26000314A');
   assert.equal(s314.area, 'STAIN');
@@ -200,7 +200,7 @@ test('saved data from version 4 gets whole-slide imaging', () => {
   const old = structuredClone(state);
   delete old.wsi; old.version = 4;
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 7);   // versions 6 (estimates) and 7 run after it
+  assert.equal(old.version, 8);   // versions 6 (estimates), 7 and 8 run after it
   assert.deepEqual(old.wsi.scanners.map((s) => s.id), ['AT2', 'GT450', 'FL', 'PHENOHT']);
   assert.equal(upgradeToV5(old), false);
 });
@@ -231,7 +231,7 @@ test('the file\'s own scanner wins over the folder or page choice, with a warnin
   assert.equal(state.wsi.images.find((x) => x.fileName === 'Slide_0042.svs').scannerId, 'FL');
 });
 
-test('a slide waiting for rescanning holds its PHL number in Scan until the new scan is registered', async () => {
+test('a slide waiting for rescanning holds its MHL number in Scan until the new scan is registered', async () => {
   const { state, call, fails } = fresh();
   const subject = (phl) => state.subjects.find((s) => s.phl === phl);
   assert.match(fails('POST', '/api/wsi/complete', { subjectIds: [subject('26000325A').id] }), /waiting to be rescanned \(26000325A-S03\.svs\)/);
@@ -245,7 +245,7 @@ test('a slide waiting for rescanning holds its PHL number in Scan until the new 
   assert.equal(subject('26000325A').area, 'QC-PA');
 });
 
-test('slide IDs: markers are not blocks or slides, dates lose to PHL numbers, and a stray barcode number does not hide the file name', () => {
+test('slide IDs: markers are not blocks or slides, dates lose to MHL numbers, and a stray barcode number does not hide the file name', () => {
   const p = (t) => { const x = W.parseSlideId(t); return x && [x.phl, x.block, x.slide, x.stain].join('|'); };
   assert.equal(p('26000305A-B2-S100.svs'), '26000305A|2||S100');
   assert.equal(p('26000305A-B220'), '26000305A|||B220');

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs --open",
-    "test": "node --test test/core.test.mjs test/ihc.test.mjs test/pathology.test.mjs test/server.test.mjs test/v4.test.mjs test/v5.test.mjs test/v6.test.mjs test/estimates.test.mjs test/estimate-email.test.mjs test/v7.test.mjs test/animallist.test.mjs ../tools/rules-reference/rules.test.mjs",
+    "test": "node --test test/core.test.mjs test/ihc.test.mjs test/pathology.test.mjs test/server.test.mjs test/v4.test.mjs test/v5.test.mjs test/v6.test.mjs test/estimates.test.mjs test/estimate-email.test.mjs test/v7.test.mjs test/animallist.test.mjs test/ihcfeedback.test.mjs ../tools/rules-reference/rules.test.mjs",
     "build": "node build-standalone.mjs"
   },
   "engines": { "node": ">=18" }

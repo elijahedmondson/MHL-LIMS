@@ -25,7 +25,7 @@ public sealed record RequestDetail(
     decimal ChargedTotal);
 
 /// <summary>
-/// The unified lookup: find a request by request number, PHL#, ZAP#, NAS# or investigator,
+/// The unified lookup: find a request by request number, MHL#, ZAP#, NAS# or investigator,
 /// then show everything about it on one page.
 /// </summary>
 public sealed class LookupService(LimsDbContext db)
@@ -50,7 +50,7 @@ public sealed class LookupService(LimsDbContext db)
         foreach (var s in await db.Subjects.AsNoTracking()
                      .Where(s => s.PhlNumber.StartsWith(upper))
                      .Select(s => new { s.RequestId, s.PhlNumber }).Take(maxResults).ToListAsync(ct))
-            Add(s.RequestId, $"PHL# {s.PhlNumber}");
+            Add(s.RequestId, $"MHL# {s.PhlNumber}");
 
         foreach (var r in await db.Requests.AsNoTracking()
                      .Where(r => r.Study != null && r.Study.ZapNumber == upper)

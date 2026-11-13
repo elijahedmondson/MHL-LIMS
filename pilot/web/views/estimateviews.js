@@ -236,7 +236,7 @@ function nasPanel(meta, d) {
       </div>
       <div id="nascreate" class="form" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px" hidden>
         <div class="field"><label for="ntype2">Request type</label><select id="ntype2">${options(Object.entries(meta.requestTypes).map(([k, v]) => [k, v.name]), e.type, { blank: 'Choose' })}</select></div>
-        <div class="field"><label for="nn2">PHL numbers</label><input id="nn2" type="number" min="1" max="500" value="${e.n ?? ''}"></div>
+        <div class="field"><label for="nn2">MHL numbers</label><input id="nn2" type="number" min="1" max="500" value="${e.n ?? ''}"></div>
         <div class="field"><label for="nauth">Authorized ($)</label><input id="nauth" type="number" min="0.01" step="0.01" placeholder="the estimate total"></div>
         <div class="field"><label for="nproj">Project ID</label><input id="nproj" maxlength="30" placeholder="Costpoint project"></div>
         <div class="field"><label for="nnum">NAS# (optional)</label><input id="nnum" maxlength="30" placeholder="next number"></div>
@@ -322,7 +322,7 @@ function editor(app, meta, pl, d) {
           <div class="field"><label for="especies">Species</label><select id="especies">${options(Object.entries(meta.species).map(([k, v]) => [k, v.name]), ed.species, { blank: 'Not set' })}</select></div>
           <div class="field"><label for="efix">Fixative</label><select id="efix">${options(FIXATIVES, ed.fixative)}</select></div>
           <div class="field"><label for="etype">Kind of work (for the NAS request)</label><select id="etype">${options(Object.entries(meta.requestTypes).map(([k, v]) => [k, v.name]), ed.type, { blank: 'Decide later' })}</select></div>
-          <div class="field"><label for="en">Animals or samples (PHL numbers)</label><input id="en" type="number" min="1" max="500" value="${ed.n ?? ''}"></div>
+          <div class="field"><label for="en">Animals or samples (MHL numbers)</label><input id="en" type="number" min="1" max="500" value="${ed.n ?? ''}"></div>
           <div class="field"><label for="evalid">Valid for (days after sending)</label><input id="evalid" type="number" min="1" max="365" value="${ed.validDays ?? ESTX.VALID_DAYS}"></div>
         </form>
         <h2 class="section">Work and prices</h2>

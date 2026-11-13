@@ -40,7 +40,7 @@ async function queue(box, meta, reload) {
       </div>
       <div>
         <h2>Release a billing batch</h2>
-        <p class="muted">Locks the approved charges for one lab and period and produces the billing file in PHL's Rpt080 format.</p>
+        <p class="muted">Locks the approved charges for one lab and period and produces the billing file in the Rpt080 format of PHL.exe, the old tracking system.</p>
         <form class="form three" id="batch" style="align-items:end">
           <div class="field"><label for="lab">Lab</label><select id="lab"><option value="HP">HP (histology)</option><option value="PA">PA (pathology)</option></select></div>
           <div class="field"><label for="start">From</label><input id="start" type="date" value="${firstOfMonth(meta.today, 1)}"></div>

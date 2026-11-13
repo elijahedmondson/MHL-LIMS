@@ -253,7 +253,7 @@ test('saved data from version 5 gets an empty list of estimates', () => {
   const old = structuredClone(seeded);
   delete old.estimates; old.version = 5;
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.deepEqual([old.version, old.estimates], [7, []]);
+  assert.deepEqual([old.version, old.estimates], [8, []]);
   assert.equal(upgradeToV6(old), false);
   assert.deepEqual(emptyState(TODAY).estimates, []);
 });

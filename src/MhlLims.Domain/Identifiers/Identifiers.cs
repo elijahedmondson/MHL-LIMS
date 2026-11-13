@@ -4,7 +4,7 @@ using MhlLims.Domain.Common;
 namespace MhlLims.Domain.Identifiers;
 
 /// <summary>
-/// A PHL number: eight digits followed by an upper-case suffix letter (e.g. 27000123A).
+/// An MHL number: eight digits followed by an upper-case suffix letter (e.g. 27000123A).
 /// Legacy six-digit "PM" numbers (e.g. 123456B) are accepted so migrated records still parse.
 /// </summary>
 public readonly record struct PhlNumber
@@ -38,7 +38,7 @@ public readonly record struct PhlNumber
     public static PhlNumber Parse(string text) =>
         TryParse(text, out var p)
             ? p
-            : throw new DomainException($"'{text}' is not a valid PHL number (eight digits followed by a letter, e.g. 27000123A).");
+            : throw new DomainException($"'{text}' is not a valid MHL number (eight digits followed by a letter, e.g. 27000123A).");
 
     public override string ToString() => Value ?? string.Empty;
 }
@@ -69,12 +69,12 @@ public static class PhlNumberGenerator
     public static short CounterPeriod(PhlNumberFormat format, DateOnly receivedDate) =>
         format == PhlNumberFormat.YearPrefixed ? (short)(receivedDate.Year % 100) : (short)0;
 
-    /// <summary>Formats a block of allocated counter values as PHL numbers.</summary>
+    /// <summary>Formats a block of allocated counter values as MHL numbers.</summary>
     public static IReadOnlyList<PhlNumber> Format(int firstValue, int count, PhlNumberFormat format, DateOnly receivedDate, char suffix = 'A')
     {
-        if (count < 1) throw new DomainException("At least one PHL number must be requested.");
+        if (count < 1) throw new DomainException("At least one MHL number must be requested.");
         if (firstValue < 1) throw new DomainException("Counter values start at 1.");
-        if (suffix < 'A' || suffix > 'Z') throw new DomainException("The PHL number suffix must be a letter A-Z.");
+        if (suffix < 'A' || suffix > 'Z') throw new DomainException("The MHL number suffix must be a letter A-Z.");
 
         var numbers = new List<PhlNumber>(count);
         for (var i = 0; i < count; i++)
@@ -86,8 +86,8 @@ public static class PhlNumberGenerator
                     n.ToString("D8", CultureInfo.InvariantCulture),
                 PhlNumberFormat.YearPrefixed when n <= 999_999 =>
                     (receivedDate.Year % 100).ToString("D2", CultureInfo.InvariantCulture) + n.ToString("D6", CultureInfo.InvariantCulture),
-                PhlNumberFormat.Sequential => throw new DomainException("The PHL number counter has exceeded eight digits."),
-                PhlNumberFormat.YearPrefixed => throw new DomainException("More than 999,999 PHL numbers were requested in one year."),
+                PhlNumberFormat.Sequential => throw new DomainException("The MHL number counter has exceeded eight digits."),
+                PhlNumberFormat.YearPrefixed => throw new DomainException("More than 999,999 MHL numbers were requested in one year."),
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
             numbers.Add(PhlNumber.Parse(digits + suffix));
@@ -112,7 +112,7 @@ public static class RequestNumberGenerator
     }
 }
 
-/// <summary>Barcode values for blocks and slides, derived from the PHL number.</summary>
+/// <summary>Barcode values for blocks and slides, derived from the MHL number.</summary>
 public static class Barcodes
 {
     public static string Block(PhlNumber phl, int blockNumber)

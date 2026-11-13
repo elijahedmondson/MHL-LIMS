@@ -92,34 +92,48 @@ export function fixativeTags(raw) {
   return FIXATIVE_TAGS.filter((t) => tags.has(t));
 }
 
-const FLUOR = /alexa|fitc|\bcy[235]\b|texas red|dylight|\bpe\b|rhodamine|tritc|red 549|\bsa-af\d/i;
+// Fluorescent detection: named dyes, or a fluorophore wavelength after a dye family ("AF 594", "CF647") or after an
+// anti-something secondary ("anti-HRP 594", "goat anti-rabbit 488", "anti-DIG 647").
+const FLUOR = /alexa|fitc|\bcy[235]\b|texas red|dylight|\bpe\b|rhodamine|tritc|red 549|\bsa-af\d|\b(?:af|cf|atto|ifluor)\s?-?\s?(?:350|405|430|488|514|532|546|555|568|594|610|633|647|660|680|700|750|790)\b|\banti-?\s?[a-z0-9]+[\s-](?:405|488|546|555|568|594|633|647|660|680|750)\b/i;
+// An overnight primary incubation ("1:2000 ONRT", "ON 4C", "o/n") is done by hand: the stainers do not run overnight,
+// so a protocol that borrows BOND or Ventana reagents for it is still a manual stain.
+const OVERNIGHT = (dilution) => /\b(?:o\/n|onrt|on\s?rt|overnight)\b/i.test(dilution) || /\bON(?:\b|\d)/.test(dilution);   // "ON", "ON 4C", "ON4C"
+export const isOvernight = (dilution) => OVERNIGHT(String(dilution || ''));
 
-// What kind of assay a protocol is, and how it is detected.
-export function classify({ name = '', kit = '' }) {
-  const n = String(name); const k = String(kit);
+// What kind of assay a protocol is, and how it is detected. Platform and chromogen are a best guess from the text;
+// the IHC team can set them by hand (see deriveAssay).
+export function classify({ name = '', kit = '', dilution: dil = '' }) {
+  // Non-breaking spaces (pasted from Word or a web page) count as spaces, here and in the C# port.
+  const sp = (v) => String(v ?? '').replace(/\u00a0/g, ' ');
+  const n = sp(name); const k = sp(kit); const dilution = sp(dil);
   // Opal fluorophores are written "OPAL 520", "OPAL520" or "OPALs 690, 520, 570"; count the distinct ones.
   const opal = /opal/i.test(k) ? new Set(k.match(/\b(480|520|540|570|620|650|690|780)\b/g) || []).size || 1 : 0;
   const namePlex = /^duplex\b/i.test(n) ? 2 : /^triplex\b/i.test(n) ? 3 : Number(n.match(/^(\d)-plex/i)?.[1] || 0);
+  const byHand = isOvernight(dilution) || /\bmanual\b/i.test(k);
+  const platform = byHand ? 'Manual' : /bond/i.test(k) ? 'Leica Bond' : /ventana|ultraview|optiview/i.test(k) ? 'Ventana' : 'Manual';
   // A 4- to 6-plex panel is always fluorescent here, even when the kit column does not say so.
-  if (namePlex >= 4 && !opal) return { kind: 'Opal', plex: namePlex, chromogen: 'Opal', platform: /bond/i.test(k) ? 'Leica Bond' : 'Manual' };
-  const platform = /bond/i.test(k) ? 'Leica Bond' : /ventana|ultraview|optiview/i.test(k) ? 'Ventana' : 'Manual';
-  if (/tunel|apoptag/i.test(n)) return { kind: 'TUNEL', plex: 1, chromogen: 'DAB', platform };
+  if (namePlex >= 4 && !opal) return { kind: 'Opal', plex: namePlex, chromogen: 'Opal', platform: platform === 'Ventana' ? 'Manual' : platform };
+  const fluor = FLUOR.test(k) || FLUOR.test(n);
+  // A TUNEL assay may be named for its target and only name the kit ("ApopTag kit anti-DIG 647").
+  if (/tunel|apoptag/i.test(n) || /tunel|apoptag/i.test(k)) return { kind: 'TUNEL', plex: 1, chromogen: fluor ? 'Fluorescent' : 'DAB', platform };
   if (/β-gal|b-gal|x-gal|beta-gal/i.test(n)) return { kind: 'β-gal', plex: 1, chromogen: 'X-gal', platform };
   if (namePlex >= 2 || opal >= 2) {
     const plex = Math.max(namePlex, opal);
     if (opal >= 1) return { kind: 'Opal', plex, chromogen: 'Opal', platform };
-    if (FLUOR.test(k) || FLUOR.test(n)) return { kind: 'IF', plex, chromogen: 'Fluorescent', platform };
+    if (fluor) return { kind: 'IF', plex, chromogen: 'Fluorescent', platform };
     return { kind: 'IHC', plex, chromogen: /red/i.test(k) ? 'DAB + Red' : 'DAB', platform };
   }
   if (opal === 1) return { kind: 'Opal', plex: 1, chromogen: 'Opal', platform };
-  if (FLUOR.test(k) || FLUOR.test(n)) return { kind: 'IF', plex: 1, chromogen: 'Fluorescent', platform };
+  if (fluor) return { kind: 'IF', plex: 1, chromogen: 'Fluorescent', platform };
   return { kind: 'IHC', plex: 1, chromogen: /refine red|fast red|permanent red|vector red/i.test(k) ? 'Red' : 'DAB', platform };
 }
 
 export const kindLabel = (a) => (a.kind === 'Opal' ? (a.plex > 1 ? `Opal ${a.plex}-plex` : 'Opal (1 marker)')
   : a.kind === 'IF' ? (a.plex > 1 ? `IF ${a.plex}-plex` : 'Immunofluorescence')
-    : a.kind === 'IHC' ? (a.plex > 1 ? `IHC ${a.plex}-plex` : 'IHC') : a.kind);
-export const isFluorescent = (a) => a.kind === 'Opal' || a.kind === 'IF';
+    : a.kind === 'IHC' ? (a.plex > 1 ? `IHC ${a.plex}-plex` : 'IHC')
+      : a.kind === 'TUNEL' && a.chromogen === 'Fluorescent' ? 'TUNEL (fluorescent)' : a.kind);
+// A fluorescent TUNEL counts too: it is scanned on the Akoya system and has no chromogen to choose.
+export const isFluorescent = (a) => a.kind === 'Opal' || a.kind === 'IF' || a.chromogen === 'Fluorescent';
 
 // Fields people edit; everything else on an assay is derived from them.
 export const ASSAY_FIELDS = [
@@ -128,9 +142,41 @@ export const ASSAY_FIELDS = [
   ['manufacturer', 'Manufacturer'], ['catalog', 'Catalog number'],
 ];
 
+// Fields added in the LIMS (the IHC database export has no columns for them). The IHC team fills them in on the
+// assay form; each is a drop-down list except the clone. An empty value means "not recorded".
+export const PLATFORMS = ['Manual', 'Leica Bond', 'Ventana'];
+export const CHROMOGENS = ['DAB', 'Red', 'DAB + Red', 'Fluorescent', 'X-gal'];
+export const HOSTS_LIST = ['Rabbit', 'Mouse', 'Rat', 'Goat', 'Sheep', 'Donkey', 'Chicken', 'Guinea pig', 'Hamster', 'Human', 'Not applicable'];
+export const CLONALITIES = ['Monoclonal', 'Polyclonal', 'Not applicable'];
+export const VISIBILITY = [['Public', 'Public: investigators can request it'], ['Internal', 'Not public: MHL staff only']];
+export const RESULTS = [['', 'Not recorded'], ['Works', 'Works'], ['Optimizing', 'Being optimized'], ['Failed', 'Did not work']];
+export const resultLabel = (r) => RESULTS.find(([k]) => k === r)?.[1] || 'Not recorded';
+export const EXTRA_FIELDS = [
+  ['clone', 'Antibody clone'], ['host', 'Antibody host'], ['clonality', 'Clonality'], ['platformSet', 'Platform'], ['chromogenSet', 'Chromogen'],
+  ['visibility', 'Public'], ['preferred', 'Preferred'], ['result', 'Result'],
+];
+
+// Platform and chromogen set by hand win over the guess from the text. Choosing Fluorescent for an IHC protocol makes
+// it immunofluorescence (and the reverse), which changes how it is priced and scanned.
+export function applyDetection(c, { platformSet = '', chromogenSet = '' } = {}) {
+  const out = { ...c, platformAuto: c.platform, chromogenAuto: c.chromogen };
+  if (PLATFORMS.includes(platformSet)) out.platform = platformSet;
+  if (CHROMOGENS.includes(chromogenSet)) {
+    if (out.kind === 'Opal') { if (chromogenSet !== 'Fluorescent') { out.kind = 'IHC'; out.chromogen = chromogenSet; } }
+    else {
+      out.chromogen = chromogenSet;
+      if (chromogenSet === 'Fluorescent' && out.kind === 'IHC') out.kind = 'IF';
+      else if (chromogenSet !== 'Fluorescent' && out.kind === 'IF') out.kind = 'IHC';
+    }
+  }
+  return out;
+}
+
 export function deriveAssay(fields) {
   const sp = speciesTags(fields.species);
-  return { ...classify(fields), speciesTags: sp.tags, speciesOther: sp.other, fixTags: fixativeTags(fields.fixative) };
+  const d = applyDetection(classify(fields), fields);
+  delete d.platformAuto; delete d.chromogenAuto;
+  return { ...d, speciesTags: sp.tags, speciesOther: sp.other, fixTags: fixativeTags(fields.fixative) };
 }
 
 export const FLAG_TEXT = {
@@ -145,37 +191,55 @@ export const FLAG_TEXT = {
 };
 
 // ---------- antibody details ----------
-// The catalog has no clone or host columns. They are read from the text where they appear: a clone in the name
-// ("2A Peptide (3H4)", "CD3 (clone SP7)"), the host and isotype in brackets after the catalog number ("(rabb mAb)",
-// "(rat IgG2a)"). An assay's own clone or host field, once someone fills it in, wins.
+// The catalog has no clone or host columns. Until someone fills in the assay's own clone, host and clonality fields,
+// they are read from the text where they appear: a clone in the name ("2A Peptide (3H4)", "CD3 (clone SP7)"), the
+// host and isotype in brackets after the catalog number ("(rabb mAb)", "(rat IgG2a)"). Notes are never read: they
+// are free text ("Kit does not have a clone or host") and gave false clones. A field filled in always wins, and
+// "N/A" (or "none", "-") in it means "not applicable": nothing is guessed for that field.
 const HOSTS = [[/\b(rabb(it)?|rab|rb)\b/i, 'Rabbit'], [/\b(ms|mouse|msigg\w*)\b/i, 'Mouse'], [/\b(rat|rt)\b/i, 'Rat'], [/\b(goat|gt)\b/i, 'Goat'],
   [/\b(sheep|sh)\b/i, 'Sheep'], [/\b(chicken|ch)\b/i, 'Chicken'], [/\b(g\.?\s?pig|guinea pig)\b/i, 'Guinea pig'], [/\bhamster\b/i, 'Hamster'],
   [/\bdonkey\b/i, 'Donkey'], [/\bhuman\b/i, 'Human']];
 const CLONE_LIKE = /^(?:\d+[A-Z]\d+[a-z]?|[A-Z]{1,3}\d{1,4}[A-Z]?\d*|(?:SP|EP|EPR|MRQ|RM|D|E|C|MECA|RAM|YP|HMB|AE)-?\d[\w.\-]*|AE1\/AE3|N-\d+|MC-\d+)$/;
 const NOT_CLONE = /^(CD\d+|p\d+|CA\d+|HLA-|ICAM|NCAM|SSEA|LMP|XPO|CRHR|SQSTM|5HT|GLPN|FLK)/i;
+export const NOT_APPLICABLE = /^(n\/?a|none|not applicable|no clone|-+|—)$/i;
 
 export function antibodyInfo(a) {
   const name = String(a.name || ''); const cat = String(a.catalog || '');
+  const own = { clone: String(a.clone || '').trim(), host: String(a.host || '').trim(), clonality: String(a.clonality || '').trim() };
+  const entered = !!(own.clone || own.host || own.clonality);
   // Panels and double stains hold several antibodies; their details are on the components.
-  if ((a.plex > 1 || (cat.match(/,/g) || []).length >= 1) && !a.clone && !a.host) return { clone: '', host: '', isotype: '', clonality: '', conjugate: '', several: true };
-  let clone = String(a.clone || '').trim();
-  if (!clone) {
-    const explicit = `${name} ${cat} ${a.notes || ''}`.match(/\bclone\s*[:#]?\s*([A-Za-z0-9][\w.\-\/]*)/i);
-    if (explicit) clone = explicit[1];
+  if ((a.plex > 1 || (cat.match(/,/g) || []).length >= 1) && !entered) return { clone: '', host: '', isotype: '', clonality: '', conjugate: '', several: true, from: {} };
+  const from = {};
+  const cloneNA = NOT_APPLICABLE.test(own.clone);
+  let clone = cloneNA ? '' : own.clone;
+  if (own.clone) from.clone = 'entered';
+  else {
+    const explicit = `${name} ${cat}`.match(/\bclone\s*[:#]?\s*([A-Za-z0-9][\w.\-\/]*)/i);
+    const tok = explicit?.[1] || '';
+    if (tok && /\d/.test(tok) && !NOT_APPLICABLE.test(tok)) clone = tok;
     else {
       const paren = name.match(/\(([^()]+)\)\s*$/);
-      const tok = paren ? paren[1].trim() : '';
-      if (tok && !/\s/.test(tok) && /\d/.test(tok) && CLONE_LIKE.test(tok) && !NOT_CLONE.test(tok)) clone = tok;
+      const p = paren ? paren[1].trim() : '';
+      if (p && !/\s/.test(p) && /\d/.test(p) && CLONE_LIKE.test(p) && !NOT_CLONE.test(p)) clone = p;
     }
+    if (clone) from.clone = 'text';
   }
   const brackets = (cat.match(/\(([^()]*)\)/g) || []).map((x) => x.slice(1, -1)).filter((x) => !/^was\b/i.test(x)).join(' ');
-  let host = String(a.host || '').trim();
-  if (!host) host = HOSTS.find(([re]) => re.test(brackets))?.[1] || '';
+  const hostNA = NOT_APPLICABLE.test(own.host);
+  let host = hostNA ? 'Not applicable' : own.host;
+  if (own.host) from.host = 'entered';
+  else { host = HOSTS.find(([re]) => re.test(brackets))?.[1] || ''; if (host) from.host = 'text'; }
   const isotype = (brackets.match(/\bIg[AGMEY]\d?[a-c]?\b/i) || [''])[0].replace(/^ig/i, 'Ig');
-  const clonality = /\b(mab|mono|monocl)/i.test(brackets) || clone || (isotype && host !== 'Rabbit' && host !== 'Goat' && !/poly|pab/i.test(brackets)) ? 'Monoclonal'
-    : /\b(pab|poly|polycl)/i.test(brackets) || /^(Goat|Sheep|Donkey|Chicken|Guinea pig)$/.test(host) ? 'Polyclonal' : '';
+  let clonality = '';
+  if (own.clonality) { clonality = NOT_APPLICABLE.test(own.clonality) ? 'Not applicable' : own.clonality; from.clonality = 'entered'; }
+  else if (!cloneNA) {
+    const realHost = host === 'Not applicable' ? '' : host;
+    clonality = /\b(mab|mono|monocl)/i.test(brackets) || clone || (isotype && realHost !== 'Rabbit' && realHost !== 'Goat' && !/poly|pab/i.test(brackets)) ? 'Monoclonal'
+      : /\b(pab|poly|polycl)/i.test(brackets) || /^(Goat|Sheep|Donkey|Chicken|Guinea pig)$/.test(realHost) ? 'Polyclonal' : '';
+    if (clonality) from.clonality = 'text';
+  }
   const biotin = /biot/i.test(brackets);
-  return { clone, host, isotype, clonality, conjugate: biotin ? 'Biotin' : /FITC/i.test(`${name} ${brackets}`) ? 'FITC' : '' };
+  return { clone, host, isotype, clonality, conjugate: biotin ? 'Biotin' : /FITC/i.test(`${name} ${brackets}`) ? 'FITC' : '', from, cloneNotApplicable: cloneNA };
 }
 
 // ---------- matching a sample to an assay ----------
@@ -294,6 +358,8 @@ export function requestWarnings(draft, assayById, today) {
     const a = s.assayId ? assayById(s.assayId) : null;
     if (a) {
       if (a.status !== 'Active') out.push(`${a.name} (#${a.id}) is ${a.status.toLowerCase()} in the catalog.`);
+      if (a.result === 'Failed') out.push(`${a.name} (#${a.id}) is marked "Did not work" in the catalog. Choose another protocol or check with the IHC team.`);
+      else if (a.result === 'Optimizing') out.push(`${a.name} (#${a.id}) is still being optimized.`);
       for (const n of assayFit(a, { species: draft.species, fixative: draft.fixativeUsed, sampleTypes: types })) out.push(`${a.name} (#${a.id}) is ${n}.`);
     } else if (s.newAntibody) out.push(`${s.newAntibody.name} is not in the catalog, so the IHC team will optimize it first. The antibody's datasheet helps.`);
   }
@@ -310,4 +376,35 @@ export function summarize(draft, assayById) {
   const scan = [draft.scan?.x20 && '20x', draft.scan?.x40 && '40x'].filter(Boolean).join(' and ');
   const tissues = [...new Set((draft.samples || []).map((s) => s.tissue).filter(Boolean))].join(', ');
   return `IHC request: ${parts.join('; ')} on ${(draft.samples || []).length} block(s)${tissues ? ` (${tissues})` : ''}${scan ? `; scan at ${scan}` : ''}.`;
+}
+
+// ---------- the catalog as an Excel workbook ----------
+// The workbook: one row per protocol with every column, and a second sheet saying what the columns mean.
+export const CATALOG_COLUMNS = [
+  ['#', 'id', 7], ['Antibody', 'name', 28], ['Antibody clone', 'cloneShown', 14], ['Antibody host', 'hostShown', 13], ['Clonality', 'clonalityShown', 13],
+  ['Kind', 'kindLabel', 16], ['Platform', 'platform', 12], ['Chromogen', 'chromogen', 12], ['Dilution and time', 'dilution', 22], ['Antigen retrieval', 'retrieval', 30],
+  ['Proteolytic digestion', 'digestion', 18], ['Secondary antibody / detection kit', 'kit', 40], ['Fixative', 'fixative', 16], ['Species', 'species', 18],
+  ['Control tissue', 'control', 24], ['Manufacturer', 'manufacturer', 20], ['Catalog number', 'catalog', 20], ['Public', 'publicText', 10], ['Preferred', 'preferredText', 10],
+  ['Result', 'resultLabel', 15], ['Status', 'status', 10], ['Needs checking', 'checkText', 14], ['Notes', 'notes', 40], ['Last changed', 'changed', 12], ['Export line', 'sourceLine', 10],
+];
+export function catalogSheets(assays, { filtered = false, today = '', source = '' } = {}) {
+  const row = (a) => {
+    const v = { ...a, publicText: a.visibility === 'Internal' ? 'Not public' : 'Public', preferredText: a.preferred ? 'Yes' : 'No',
+      checkText: a.flags.filter((x) => x !== 'duplicate').length ? 'Yes' : '', changed: a.updatedAt ? a.updatedAt.slice(0, 10) : '' };
+    return CATALOG_COLUMNS.map(([, k]) => (k === 'id' || k === 'sourceLine' ? (Number.isFinite(v[k]) ? v[k] : '') : String(v[k] ?? '')));
+  };
+  return [
+    { name: 'Assay catalog', rows: [CATALOG_COLUMNS.map(([h]) => ({ v: h, style: 'header' })), ...assays.map(row)], cols: CATALOG_COLUMNS.map(([, , w]) => w), freezeRows: 1 },
+    { name: 'About', cols: [26, 90], rows: [
+      [{ v: 'MHL IHC assay catalog', style: 'title' }],
+      ['Downloaded', today], ['From', `${source} (MHL LIMS pilot)`], ['Rows', `${assays.length} protocols${filtered ? ', the ones that matched the filters on screen' : ', every status'}`], [],
+      [{ v: 'Column', style: 'header' }, { v: 'Meaning', style: 'header' }],
+      ['Antibody clone, host, clonality', 'As entered on the assay; where nobody has entered them, as read from the antibody name and catalog number. N/A = not applicable.'],
+      ['Kind, platform, chromogen', 'Worked out from the detection kit and dilution unless set by hand on the assay.'],
+      ['Public', 'Public: investigators can request it. Not public: MHL staff only.'],
+      ['Preferred', 'The protocol to use first when there are several for the same target.'],
+      ['Result', 'Works, Being optimized, Did not work, or not recorded.'],
+      ['Needs checking', 'Something the import repaired or found missing; see the assay page in the LIMS.'],
+    ] },
+  ];
 }

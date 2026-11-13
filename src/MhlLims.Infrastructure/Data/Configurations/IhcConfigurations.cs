@@ -23,6 +23,13 @@ internal sealed class AssayConfiguration : IEntityTypeConfiguration<Assay>
         b.Property(x => x.ControlTissue).HasMaxLength(600);
         b.Property(x => x.Manufacturer).HasMaxLength(200);
         b.Property(x => x.CatalogNumber).HasMaxLength(200);
+        b.Property(x => x.Clone).HasMaxLength(60);
+        b.Property(x => x.Host).HasMaxLength(30);
+        b.Property(x => x.Clonality).HasMaxLength(20);
+        b.Property(x => x.PlatformSet).HasMaxLength(20);
+        b.Property(x => x.ChromogenSet).HasMaxLength(20);
+        b.Property(x => x.Visibility).HasSnakeCaseEnumConversion(10);
+        b.Property(x => x.Result).HasSnakeCaseNullableEnumConversion(12);
         b.Property(x => x.Kind).HasSnakeCaseEnumConversion(10);
         b.Property(x => x.Chromogen).HasMaxLength(30);
         b.Property(x => x.Platform).HasMaxLength(20);

@@ -10,7 +10,7 @@ export const AREAS = [
 export const AREA_ORDER = AREAS.map((a) => a.code);
 export const TERMINAL_AREAS = ['QC-PA'];
 
-// plan: [section, charge code, units per PHL number] used to suggest an estimate.
+// plan: [section, charge code, units per MHL number] used to suggest an estimate.
 export const REQUEST_TYPES = {
   'NECRO-FULL': { name: 'Necropsy, histology and pathology', lab: 'HP', days: 30, areas: ['NECRO', 'BLOOD', 'TRIMM', 'EMBED', 'MICRO', 'STAIN', 'IMAGE', 'PATHO'],
     plan: [['NECRO', 'HP002001', 1], ['NECRO', 'HP002021', 1], ['TRIM_EMBED', 'HP003003', 3], ['MICROTOMY', 'HP004001', 3], ['STAIN', 'HP005003', 3], ['IMAGE', 'HP001006', 3], ['PATH', 'PA001002', 3]] },

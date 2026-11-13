@@ -27,7 +27,7 @@ const TODAY = '2026-11-04';
 const state = seedState({ priceList, ihcCatalog: rawCatalog, today: TODAY });
 const protocols = catalog.assays.filter((a) => !a.components);
 const uniq = (xs) => [...new Set(xs)];
-const view = (a) => ({ id: a.id, name: a.name, kind: a.kind, plex: a.plex, status: a.status, speciesTags: a.speciesTags, fixTags: a.fixTags });
+const view = (a) => ({ id: a.id, name: a.name, kind: a.kind, plex: a.plex, status: a.status, speciesTags: a.speciesTags, fixTags: a.fixTags, chromogen: a.chromogen });
 
 const g = { generatedFrom: 'pilot/core/ihc.mjs, pathology.mjs, necrules.mjs', generatedOn: TODAY };
 
@@ -40,8 +40,26 @@ g.speciesTags = uniq([...catalog.assays.map((a) => a.species || ''), 'Hu in Rabb
   .map((input) => ({ input, ...IHC.speciesTags(input) }));
 g.fixativeTags = uniq([...catalog.assays.map((a) => a.fixative || ''), 'OCT', 'Formalin', 'Fresh frozen, acetone', ''])
   .map((input) => ({ input, tags: IHC.fixativeTags(input) }));
-g.classify = protocols.map((a) => ({ name: a.name, kit: a.kit || '', ...IHC.classify({ name: a.name, kit: a.kit || '' }) }));
-g.kindLabel = [['IHC', 1], ['IHC', 3], ['Opal', 1], ['Opal', 6], ['IF', 1], ['IF', 2], ['TUNEL', 1], ['β-gal', 1]].map(([kind, plex]) => ({ kind, plex, label: IHC.kindLabel({ kind, plex }) }));
+// The whole catalog, plus the cases the IHC department reported in November 2026 (fluorophores such as "anti-HRP 594",
+// a fluorescent ApopTag, BOND reagents used by hand overnight) and a few more of each kind.
+const extraClassify = [
+  { name: 'test 11-11 11:59', kit: 'NGS, 2Ab Goat anti-Rabbit HRP, anti-HRP 594', dilution: '1:2000 ONRT' },
+  { name: 'test 11-11 11:59', kit: 'Bond Polymer Reagent from kit DS9800', dilution: '1:2000 ONRT' },
+  { name: 'test 11.11 12:33', kit: 'ApopTag kit anti-DIG 647', dilution: 'N/A' }, { name: 'ApopTag', kit: 'ApopTag kit', dilution: '' },
+  { name: 'X', kit: 'Goat anti-rabbit 488', dilution: '1:500 60\'' }, { name: 'X', kit: 'AF647 streptavidin', dilution: '' }, { name: 'X', kit: 'CF 568', dilution: '' },
+  { name: 'X', kit: 'Bond Polymer Refine', dilution: '1:500 ON 4C' }, { name: 'X', kit: 'Bond Polymer Refine', dilution: '1:100 o/n' }, { name: 'X', kit: 'Bond Polymer Refine', dilution: '1:50 ON4C' },
+  { name: 'X', kit: 'Bond Polymer Refine', dilution: '1:200, on Bond' }, { name: 'X', kit: 'Bond Polymer Refine (manual)', dilution: '1:200 30\'' },
+  { name: 'X', kit: 'ultraView DAB', dilution: '1:50 overnight' }, { name: '6-plex A+B+C+D+E+F', kit: 'Bond', dilution: 'ON RT' },
+];
+g.classify = [...protocols.map((a) => ({ name: a.name, kit: a.kit || '', dilution: a.dilution || '' })), ...extraClassify]
+  .map((c) => ({ ...c, ...IHC.classify(c) }));
+g.kindLabel = [['IHC', 1], ['IHC', 3], ['Opal', 1], ['Opal', 6], ['IF', 1], ['IF', 2], ['TUNEL', 1], ['β-gal', 1], ['TUNEL', 1, 'Fluorescent'], ['TUNEL', 1, 'DAB']]
+  .map(([kind, plex, chromogen = null]) => ({ kind, plex, chromogen, label: IHC.kindLabel({ kind, plex, chromogen }) }));
+// Platform and chromogen set by hand (applyDetection).
+g.applyDetection = [['IHC', 'DAB', 'Leica Bond', '', 'Fluorescent'], ['IF', 'Fluorescent', 'Manual', 'Leica Bond', 'DAB'], ['Opal', 'Opal', 'Manual', '', 'Fluorescent'],
+  ['Opal', 'Opal', 'Manual', 'Ventana', 'Red'], ['TUNEL', 'DAB', 'Manual', '', 'Fluorescent'], ['IHC', 'DAB', 'Manual', 'Robot', 'Purple'], ['IF', 'Fluorescent', 'Manual', '', '']]
+  .map(([kind, chromogen, platform, platformSet, chromogenSet]) => ({ kind, chromogen, platform, platformSet, chromogenSet,
+    result: (({ kind: k, plex, chromogen: c, platform: p }) => ({ kind: k, plex, chromogen: c, platform: p }))(IHC.applyDetection({ kind, plex: 1, chromogen, platform }, { platformSet, chromogenSet })) }));
 
 // ---------- IHC: matching and pricing requests ----------
 const fitRequests = [
@@ -71,8 +89,13 @@ const synth = [
   { name: 'Retired assay and a new antibody MHL buys', w: { species: 'Rat', fixativeUsed: '4% PFA', fixDate: '2026-10-01', samples: [{ tissue: 'Lung', type: 'FIXED' }],
     stains: [{ assayId: find((a) => a.speciesTags.includes('Human') && !a.speciesTags.includes('Rat') && a.kind === 'IHC').id }, { newAntibody: { name: 'Novel-1', supplied: false } }], scan: {} } },
 ];
+// A fluorescent TUNEL (the ApopTag kit with an anti-DIG 647 secondary): scanned on the Akoya system, no chromogen choice.
+const tunels = catalog.assays.filter((a) => a.status === 'Active' && a.kind === 'TUNEL');
+const fluorTunelId = (tunels[1] || tunels[0]).id;
+synth.push({ name: 'Fluorescent TUNEL scanned', w: { species: 'Mouse', fixativeUsed: '10% NBF', samples: [{ tissue: 'Testis', type: 'BLOCK' }, { tissue: 'Liver', type: 'FIXED' }],
+  stains: [{ assayId: fluorTunelId }], scan: { x20: true } } });
 const retiredId = g.assayFit.length ? synth[2].w.stains[0].assayId : null;
-const assayFor = (id) => { const a = byId(id); return a && a.id === retiredId ? { ...a, status: 'Retired' } : a; };
+const assayFor = (id) => { const a = byId(id); return a && a.id === retiredId ? { ...a, status: 'Retired' } : a && a.id === fluorTunelId ? { ...a, chromogen: 'Fluorescent' } : a; };
 const requests = [
   ...state.ihcRequests.map((w) => ({ name: `Seed ${w.number}`, w, today: w.submittedOn })),
   ...synth.map((s) => ({ name: s.name, w: { ...s.w, unstained: s.w.unstained || { on: false, perBlock: 1 }, he: s.w.he || { on: false, perBlock: 1 } }, today: TODAY })),

@@ -33,7 +33,7 @@ export function addDays(iso, days) {
 
 export function emptyState(today) {
   return {
-    version: 7,
+    version: 8,
     createdOn: today,
     settings: { initials: '', pricingFrom: '2026-01-01', instrumentFolders: { chemistry: '', hematology: '' } },
     counters: {},
@@ -51,6 +51,18 @@ export function emptyState(today) {
 }
 
 const newWsi = () => ({ scanners: WSIX.SCANNERS.map((s) => ({ ...s, status: 'Available', folder: '', serials: [], notes: '' })), images: [], runs: [] });
+
+// Data saved before version 8: assays gain the fields the IHC team asked for (clone, host, clonality, platform and
+// chromogen set by hand, public or not, preferred, whether it works), and their kind, platform and chromogen are worked
+// out again with the current rules (fluorophores such as "anti-HRP 594", fluorescent TUNEL, BOND reagents used by hand
+// with an overnight incubation). Nothing anyone typed is changed.
+export function upgradeToV8(state) {
+  if (state.version >= 8) return false;
+  state.assays = loadAssays({ assays: state.assays || [] });
+  state.version = 8;
+  return true;
+}
+
 // Data saved before version 7: a NAS request may now fund several requests (it stays open until closed), Xenium runs
 // are tracked, and studies keep the summary text of their study reports.
 export function upgradeToV7(state) {
@@ -109,13 +121,27 @@ export function upgradeToV4(state) {
   return true;
 }
 
-// The converted catalog leaves empty fields out; fill them in so every assay has the same shape.
+// The converted catalog leaves empty fields out; fill them in so every assay has the same shape. Kind, platform and
+// chromogen are worked out again with the current rules (a double stain keeps what the converter built from its two
+// protocols), so the catalog file never needs regenerating when a detection rule improves.
 export function loadAssays(ihcCatalog) {
-  return (ihcCatalog?.assays || []).map((a) => ({
-    name: '', dilution: '', retrieval: '', digestion: '', kit: '', fixative: '', species: '', control: '', manufacturer: '', catalog: '',
-    kind: 'IHC', plex: 1, chromogen: 'DAB', platform: 'Manual', speciesTags: [], fixTags: [], status: 'Active', list: null, sourceLine: null,
-    flags: [], repairs: {}, doubleStain: null, components: null, partOf: [], duplicateOf: null, notes: '', updatedAt: null, ...a,
-  }));
+  return (ihcCatalog?.assays || []).map((a) => {
+    const x = {
+      name: '', dilution: '', retrieval: '', digestion: '', kit: '', fixative: '', species: '', control: '', manufacturer: '', catalog: '',
+      kind: 'IHC', plex: 1, chromogen: 'DAB', platform: 'Manual', speciesTags: [], fixTags: [], status: 'Active', list: null, sourceLine: null,
+      flags: [], repairs: {}, doubleStain: null, components: null, partOf: [], duplicateOf: null, notes: '', updatedAt: null,
+      clone: '', host: '', clonality: '', platformSet: '', chromogenSet: '', visibility: 'Public', preferred: false, result: '', ...a,
+    };
+    if (!x.components) {
+      const d = IHC.applyDetection(IHC.classify(x), x);
+      Object.assign(x, { kind: d.kind, plex: d.plex, chromogen: d.chromogen, platform: d.platform });
+    } else {
+      x.platformBuilt ??= x.platform;
+      x.platform = IHC.PLATFORMS.includes(x.platformSet) ? x.platformSet : x.platformBuilt;
+      x.chromogenSet = '';
+    }
+    return x;
+  });
 }
 
 const fail = (message) => { throw new R.DomainError(message); };
@@ -149,6 +175,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   if (upgradeToV5(state)) commit();
   if (upgradeToV6(state)) commit();
   if (upgradeToV7(state)) commit();
+  if (upgradeToV8(state)) commit();
 
   function audit(action, entity, entityId, detail = '', who = null) {
     state.audit.push({ id: nextId(), at: clock.now(), by: who || by(), action, entity, entityId, detail });
@@ -164,7 +191,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   // ---------- lookups ----------
   const getRequest = (id) => state.requests.find((r) => r.id === Number(id)) || (() => { throw new HttpError(404, 'Request not found.'); })();
-  const getSubject = (id) => state.subjects.find((s) => s.id === Number(id)) || (() => { throw new HttpError(404, 'PHL number not found.'); })();
+  const getSubject = (id) => state.subjects.find((s) => s.id === Number(id)) || (() => { throw new HttpError(404, 'MHL number not found.'); })();
   const getStudy = (id) => state.studies.find((s) => s.id === Number(id)) || (() => { throw new HttpError(404, 'Study not found.'); })();
   const getCharge = (id) => state.charges.find((c) => c.id === Number(id)) || (() => { throw new HttpError(404, 'Charge not found.'); })();
   const nasOf = (r) => state.nas.find((n) => n.id === r.nasId) || null;
@@ -201,6 +228,9 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   const piName = (p) => (p ? (p.first ? `${p.last}, ${p.first}` : p.last) : '');
   const getAssay = (id) => state.assays.find((a) => a.id === Number(id)) || (() => { throw new HttpError(404, 'Assay not found.'); })();
   const assayById = (id) => state.assays.find((a) => a.id === Number(id)) || null;
+  // A stain keeps the protocol as it was when it was requested, so later catalog edits do not change the bench worksheet.
+  const assaySnapshot = (a) => ({ id: a.id, ...Object.fromEntries(IHC.ASSAY_FIELDS.map(([k]) => [k, a[k]])), kind: a.kind, plex: a.plex, chromogen: a.chromogen,
+    platform: a.platform, clone: a.clone || '', host: a.host || '', clonality: a.clonality || '', speciesTags: a.speciesTags, fixTags: a.fixTags, status: a.status });
   const getWeb = (id) => state.ihcRequests.find((w) => w.id === Number(id)) || (() => { throw new HttpError(404, 'IHC request not found.'); })();
 
   // ---------- tracking ----------
@@ -223,7 +253,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   function newCharge(request, { section, code, date, units, note, subjectId }, source = 'MANUAL', extra = {}) {
     if (request.status === 'Cancelled') fail('This request is cancelled; charges cannot be added.');
     if (subjectId != null && !state.subjects.some((s) => s.id === Number(subjectId) && s.requestId === request.id))
-      fail('That PHL number is not on this request.');
+      fail('That MHL number is not on this request.');
     const line = R.createCharge(catalog(), { requestId: request.id, chargeType: request.chargeType },
       { section: text(section, 20), code: text(code, 10).toUpperCase(), date: date || clock.today(), units: Number(units), description: text(note) || null, subjectId: subjectId == null ? null : Number(subjectId) });
     if (!isDate(line.date)) fail('The charge date is not a valid date.');
@@ -324,7 +354,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       else if (web && web.number.replace('-', '').startsWith(t.replace('-', ''))) matched = `IHC request ${web.number}`;
       else {
         const s = state.subjects.find((x) => x.requestId === r.id && x.phl.startsWith(t));
-        if (s) matched = `PHL# ${s.phl}`;
+        if (s) matched = `MHL# ${s.phl}`;
         else if (r.pi.last.toUpperCase().startsWith(t)) matched = `Investigator ${r.pi.last}`;
       }
       if (matched) hits.push({ id: r.id, href: `#/request/${r.id}`, number: r.number, pi: piName(r.pi), type: REQUEST_TYPES[r.type].name, status: r.status, zap: study?.zap || null, received: r.received, matched, billing: billingSummary(r) });
@@ -382,7 +412,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   }
 
   // The MHL Request Tracking Form, as PHL.exe printed it (d_cmp001 = d_req_prt + d_phl_prt_hp): the request on top,
-  // then each PHL number with inits, proc and units rows under every work area, a new page for each priority.
+  // then each MHL number with inits, proc and units rows under every work area, a new page for each priority.
   // Staff fill it in by hand as the samples move through the lab.
   const SHEET_COLUMNS = [['BLOOD', 'Hema/Blood Chem'], ['NECRO', 'Necro'], ['TRIMM', 'Trimm'], ['EMBED', 'Embed'], ['MICRO', 'Micro'], ['STAIN', 'Stain'],
     ['SPATL', 'Xenium'], ['IMAGE', 'Image'], ['PATHO', 'Path'], ['OTHER', 'Other'], ['QC-PA', 'QC']];
@@ -396,7 +426,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     const pathologists = [...new Set(subjects.map((s) => state.pathology[s.id]?.pathologist || state.pathAssign[s.id]).filter(Boolean))];
     const columns = SHEET_COLUMNS.filter(([code]) => code !== 'SPATL' || r.areas.includes('SPATL'))
       .map(([code, label]) => ({ code, label, inRequest: code === 'OTHER' || code === 'QC-PA' || r.areas.includes(code) }));
-    // Work already recorded in the LIMS, for a sheet reprinted part way: who moved the PHL number on from each area, and
+    // Work already recorded in the LIMS, for a sheet reprinted part way: who moved the MHL number on from each area, and
     // when (the first forward move; a move back for a recut is not the area finishing), and who completed it (QC).
     const ahead = (from, to) => AREA_ORDER.indexOf(to) > AREA_ORDER.indexOf(from);
     const done = (s) => {
@@ -474,7 +504,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     const authorized = Number(body.authorized);
     if (!(authorized > 0)) fail('The authorized amount must be more than zero.');
     const n = Number(body.n);
-    if (!Number.isInteger(n) || n < 1 || n > 500) fail('The number of PHL numbers must be a whole number from 1 to 500.');
+    if (!Number.isInteger(n) || n < 1 || n > 500) fail('The number of MHL numbers must be a whole number from 1 to 500.');
     const species = text(body.species, 20) || 'MOUSE';
     if (!SPECIES[species]) fail('Unknown species.');
     const yy = clock.today().slice(2, 4);
@@ -499,9 +529,9 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     mustBeOpenNas(nas);
     const earlier = requestsOfNas(nas).length;
     const species = text(body.species, 20) || 'MOUSE';
-    // An animal list from the investigator: one PHL number per animal, in its order.
+    // An animal list from the investigator: one MHL number per animal, in its order.
     const animals = body.animals != null ? readAnimals(body.animals, species) : null;
-    if (animals && Number(body.n) !== animals.length) fail(`The request is for ${Number(body.n)} PHL numbers but the animal list has ${animals.length} animals.`);
+    if (animals && Number(body.n) !== animals.length) fail(`The request is for ${Number(body.n)} MHL numbers but the animal list has ${animals.length} animals.`);
     const { request, phls } = insertRequest({
       nas, pi: nas.requester, project: nas.project, description: nas.description, type: text(body.type, 20), n: Number(body.n),
       species, priority: body.priority, areas: body.areas, lines: body.lines, study: body.study, fixative: body.fixative,
@@ -516,7 +546,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       const add = IHC.ihcAreas(order).filter((a) => !(order.addOn && (a === 'TRIMM' || a === 'EMBED')));
       request.areas = AREA_ORDER.filter((x) => request.areas.includes(x) || add.includes(x));
     }
-    audit('REQUEST_CREATED', 'request', request.id, `${request.number}${request.numberEnteredByHand ? ' (number entered by hand)' : ''} from NAS# ${nas.number}${earlier ? ` (request ${earlier + 1} on it)` : ''}${request.estimatePhase ? `, estimate phase "${request.estimatePhase}"` : ''}, ${phls.length} PHL numbers${request.animalList ? ` from the animal list${request.animalList.fileName ? ` ${request.animalList.fileName}` : ''}` : ''}${order ? `, with IHC order ${order.number}` : ''}`);
+    audit('REQUEST_CREATED', 'request', request.id, `${request.number}${request.numberEnteredByHand ? ' (number entered by hand)' : ''} from NAS# ${nas.number}${earlier ? ` (request ${earlier + 1} on it)` : ''}${request.estimatePhase ? `, estimate phase "${request.estimatePhase}"` : ''}, ${phls.length} MHL numbers${request.animalList ? ` from the animal list${request.animalList.fileName ? ` ${request.animalList.fileName}` : ''}` : ''}${order ? `, with IHC order ${order.number}` : ''}`);
     commit();
     return { id: request.id, number: request.number, phls, ihcNumber: order?.number || null };
   }
@@ -524,7 +554,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   // The animals as the browser sends them, checked again here: the same rules as reading the spreadsheet.
   function readAnimals(list, species) {
     if (!Array.isArray(list) || !list.length) fail('The animal list is empty.');
-    if (list.length > ANIMALS.MAX_ANIMALS) fail(`A request can have at most ${ANIMALS.MAX_ANIMALS} PHL numbers.`);
+    if (list.length > ANIMALS.MAX_ANIMALS) fail(`A request can have at most ${ANIMALS.MAX_ANIMALS} MHL numbers.`);
     const phi = ANIMALS.phiSpecies(species);
     const seen = new Set();
     return list.map((raw, i) => {
@@ -537,7 +567,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     });
   }
 
-  // Each PHL number gets its animal's details; the study gets any group it does not have yet.
+  // Each MHL number gets its animal's details; the study gets any group it does not have yet.
   function applyAnimals(request, animals, fileName) {
     const subjects = state.subjects.filter((s) => s.requestId === request.id).sort((a, b) => a.phl.localeCompare(b.phl));
     const study = request.studyId ? state.studies.find((s) => s.id === request.studyId) : null;
@@ -562,7 +592,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     request.animalList = { fileName, animals: animals.length, by: by(), at: clock.now() };
   }
 
-  // Issues the request number and PHL numbers and accessions them. Shared by NAS intake and accepted IHC requests.
+  // Issues the request number and MHL numbers and accessions them. Shared by NAS intake and accepted IHC requests.
   // ---------- request numbers ----------
   // Automatic: lab + two-digit year + counter (HP260103), skipping any number already used. By hand: a number such as a
   // legacy PHL request ID (270333, 270333A). The Rpt080 billing extract identifies a request by its lab letter and the
@@ -603,7 +633,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   function insertRequest({ nas = null, pi, project, description, type, n, species, priority, areas, lines, study, fixative, labels = null, sources = null, webRequestId = null, requestNumber = '', tissueDisp = '' }) {
     const def = REQUEST_TYPES[type];
     if (!def) fail('Choose a request type.');
-    if (!Number.isInteger(n) || n < 1 || n > 500) fail('The number of PHL numbers must be a whole number from 1 to 500.');
+    if (!Number.isInteger(n) || n < 1 || n > 500) fail('The number of MHL numbers must be a whole number from 1 to 500.');
     if (!SPECIES[species]) fail('Unknown species.');
     const prio = ['R', 'P', 'S'].includes(priority) ? priority : 'R';
     const workAreas = Array.isArray(areas) && areas.length
@@ -644,7 +674,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       const subject = {
         id: nextId(), requestId: request.id, phl, label: labels?.[i] || (sp.restricted ? `Case ${i + 1}` : String(i + 1)), groupCode: null, sex: null,
         priority: prio, species, subjectType: sp.subjectType, restricted: sp.restricted, area: null, since: today, studyId, sampleIndex: labels ? i : null,
-        sourceSubjectId: sources?.[i] ?? null,   // the existing PHL# this block came from, if any
+        sourceSubjectId: sources?.[i] ?? null,   // the existing MHL# this block came from, if any
       };
       state.subjects.push(subject);
       move(subject, 'ENTRY', 'Accessioned');
@@ -673,7 +703,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     const to = text(body.to, 10);
     const ids = new Set((body.subjectIds || []).map(Number));
     const subjects = subjectsOf(r).filter((s) => ids.has(s.id));
-    if (subjects.length === 0) fail('Select at least one PHL number.');
+    if (subjects.length === 0) fail('Select at least one MHL number.');
     let moved = 0;
     for (const s of subjects) if (move(s, to, text(body.note, 200))) moved++;
     if (moved) audit('SUBJECTS_MOVED', 'request', r.id, `${moved} to ${AREAS.find((a) => a.code === to)?.name || to}`);
@@ -1007,7 +1037,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     const protocol = studyProtocol(s);
     const weighed = protocol.organs.filter((o) => o.weigh).map((o) => o.organ);
     const esc = csvEsc;
-    const header = ['PHL', 'Animal', 'Group', 'Sex', 'Necropsy status', 'Necropsy date', 'Body weight (g)', ...weighed.map((o) => `${o} (g)`), 'Gross findings'];
+    const header = ['MHL', 'Animal', 'Group', 'Sex', 'Necropsy status', 'Necropsy date', 'Body weight (g)', ...weighed.map((o) => `${o} (g)`), 'Gross findings'];
     const rows = state.subjects.filter((x) => x.studyId === s.id).sort((a, b) => a.phl.localeCompare(b.phl)).map((a) => {
       const n = state.necropsies[a.id];
       const findings = n ? n.organs.flatMap((o) => o.findings.map((f) => `${o.organ}: ${findingText(f)}`)).join('; ') : '';
@@ -1167,7 +1197,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   }
 
   // ---------- pathology ----------
-  // One case per PHL number, like Zaphod's tblPathologyHeaders: tissues (from the approved necropsy, or added by the
+  // One case per MHL number, like Zaphod's tblPathologyHeaders: tissues (from the approved necropsy, or added by the
   // pathologist for submitted material), diagnoses per tissue, gross-to-microscopic correlation, cause of death,
   // a comment, sign-out (which creates the pathology charges) and amendments that keep the earlier versions.
   const RESULT_KEYS = PATH.RESULTS.map(([k]) => k);
@@ -1468,7 +1498,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function pathologyCsv(subjects, name) {
     const esc = csvEsc;
-    const header = ['PHL', 'Animal', 'Group', 'Sex', 'Report status', 'Version', 'Signed by', 'Signed', 'Tissue', 'Block', 'Result', 'Diagnosis', 'In dictionary', 'Modifier',
+    const header = ['MHL', 'Animal', 'Group', 'Sex', 'Report status', 'Version', 'Signed by', 'Signed', 'Tissue', 'Block', 'Result', 'Diagnosis', 'In dictionary', 'Modifier',
       'Distribution', 'Laterality', 'Severity', 'Neoplasm', 'Behavior', 'Origin', 'Gross findings correlated'];
     const label = Object.fromEntries(PATH.RESULTS);
     const rows = [];
@@ -1493,12 +1523,22 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     other: (a) => a.kind === 'TUNEL' || a.kind === 'β-gal',
   };
   const reviewFlags = (a) => a.flags.filter((f) => f !== 'duplicate');
+  const coding = (a) => ({ visibility: a.visibility || 'Public', preferred: !!a.preferred, result: a.result || '', resultLabel: IHC.resultLabel(a.result || '') });
   function assaySummary(a, fit = null) {
     return {
       id: a.id, name: a.name, kind: a.kind, plex: a.plex, kindLabel: IHC.kindLabel(a), dilution: a.dilution, retrieval: a.retrieval, kit: a.kit,
       fixative: a.fixative, species: a.species, speciesTags: a.speciesTags, fixTags: a.fixTags, control: a.control, manufacturer: a.manufacturer,
       catalog: a.catalog, status: a.status, flags: a.flags, list: a.list, isDouble: !!a.components, chromogen: a.chromogen, platform: a.platform,
-      antibody: IHC.antibodyInfo(a), ...(fit ? { fit: IHC.assayFit(a, fit) } : {}),
+      antibody: IHC.antibodyInfo(a), ...coding(a), ...(fit ? { fit: IHC.assayFit(a, fit) } : {}),
+    };
+  }
+  // Every column, for the Excel download of the catalog.
+  function assayFull(a) {
+    const ab = IHC.antibodyInfo(a);
+    return {
+      ...assaySummary(a), digestion: a.digestion, notes: a.notes, updatedAt: a.updatedAt, sourceLine: a.sourceLine,
+      clone: a.clone || '', host: a.host || '', clonality: a.clonality || '', cloneShown: ab.several ? 'Several antibodies' : ab.cloneNotApplicable ? 'N/A' : ab.clone,
+      hostShown: ab.host, clonalityShown: ab.clonality, isotype: ab.isotype, platformSet: a.platformSet || '', chromogenSet: a.chromogenSet || '',
     };
   }
 
@@ -1512,18 +1552,47 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       && (!query.species || a.speciesTags.includes(query.species))
       && (!query.fix || a.fixTags.includes(query.fix))
       && (query.issues !== '1' || reviewFlags(a).length)
+      && (!query.vis || (a.visibility || 'Public') === query.vis)
+      && (query.pref !== '1' || a.preferred)
+      && (query.result === undefined || query.result === '' || (query.result === 'none' ? !a.result : a.result === query.result))
       && words.every((w) => (/^#\d+$/.test(w) ? a.id === Number(w.slice(1)) : `${a.name} ${a.catalog} ${a.manufacturer} ${a.kit} ${a.clone || ''} ${a.host || ''}`.toLowerCase().includes(w))));
     const q = words.join(' ');
     const qre = new RegExp(`^${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^0-9]|$)`);
+    // In a search, preferred protocols come first among equally good matches, and ones marked "Did not work" last.
+    // Browsing without a search stays in alphabetical order.
+    const coded = (a) => (!q && !fit ? 0 : (a.result === 'Failed' ? 20 : 0) + (a.preferred ? 0 : 0.5));
     const rank = (a) => {
       const n = a.name.toLowerCase();
       // "cd8" ranks CD8 and CD8a above CD86.
       const r = !q ? 0 : n === q ? 0 : qre.test(n) ? 1 : n.startsWith(q) ? 2 : n.includes(q) ? 3 : 4;
-      return fit ? r + (IHC.assayFit(a, fit).length ? 10 : 0) : r;
+      return (fit ? r + (IHC.assayFit(a, fit).length ? 10 : 0) : r) + coded(a);
     };
     rows = rows.map((a) => [rank(a), a]).sort((x, y) => x[0] - y[0] || x[1].name.localeCompare(y[1].name, 'en', { sensitivity: 'base' }) || x[1].id - y[1].id).map(([, a]) => a);
     const limit = query.limit === 'all' ? rows.length : Math.max(1, Math.min(1000, Number(query.limit) || 100));
-    return { total: rows.length, assays: rows.slice(0, limit).map((a) => assaySummary(a, fit)) };
+    const view = query.full === '1' ? assayFull : (a) => assaySummary(a, fit);
+    return { total: rows.length, assays: rows.slice(0, limit).map(view) };
+  }
+
+  // Values already in the catalog, most used first, for the drop-down lists on the assay form.
+  function assayChoices() {
+    const top = (k, n = 60) => {
+      const seen = new Map();
+      for (const a of state.assays) {
+        const v = String(a[k] || '').trim();
+        if (!v || v.length > 120) continue;
+        const key = v.toLowerCase();
+        const e = seen.get(key) || { v, n: 0 };
+        e.n++; seen.set(key, e);
+      }
+      return [...seen.values()].sort((x, y) => y.n - x.n || x.v.localeCompare(y.v)).slice(0, n).map((e) => e.v);
+    };
+    const byName = (list) => [...list].sort((x, y) => x.localeCompare(y, 'en', { sensitivity: 'base' }));
+    return {
+      name: byName(top('name', 400)), dilution: top('dilution', 40), retrieval: top('retrieval', 40), digestion: top('digestion', 30), kit: top('kit', 40),
+      control: byName(top('control', 120)), manufacturer: byName(top('manufacturer', 120)), fixative: top('fixative', 30), species: top('species', 30),
+      speciesTags: IHC.SPECIES_TAGS, fixTags: IHC.FIXATIVE_TAGS, hosts: IHC.HOSTS_LIST, clonalities: IHC.CLONALITIES, platforms: IHC.PLATFORMS,
+      chromogens: IHC.CHROMOGENS, visibility: IHC.VISIBILITY, results: IHC.RESULTS,
+    };
   }
 
   function assayDetail({ params }) {
@@ -1531,7 +1600,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     const usedIn = state.ihcRequests.filter((w) => w.stains.some((s) => s.assayId === a.id))
       .map((w) => ({ id: w.id, number: w.number, status: w.status, submittedOn: w.submittedOn, investigator: piName(w.requester) }));
     return {
-      assay: { ...a, kindLabel: IHC.kindLabel(a), antibody: IHC.antibodyInfo(a) },
+      assay: { ...a, kindLabel: IHC.kindLabel(a), antibody: IHC.antibodyInfo(a), ...coding(a), auto: IHC.classify(a) },
       components: (a.components || []).map(assayById).filter(Boolean).map((x) => assaySummary(x)),
       partOf: (a.partOf || []).map(assayById).filter(Boolean).map((x) => assaySummary(x)),
       duplicateOf: a.duplicateOf ? assaySummary(assayById(a.duplicateOf)) : null,
@@ -1540,12 +1609,30 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     };
   }
 
+  // The catalog's own columns plus the fields added in the LIMS. Drop-down fields only take the listed values.
   function readAssayFields(body, base = {}) {
     const out = {};
     for (const [k] of IHC.ASSAY_FIELDS) out[k] = body[k] === undefined ? (base[k] ?? '') : text(body[k], k === 'kit' || k === 'control' ? 600 : 200);
     if (!out.name) fail('An assay needs an antibody name.');
+    const pick = (k, allowed, dflt = '') => {
+      if (body[k] === undefined) return base[k] ?? dflt;
+      const v = text(body[k], 60);
+      if (v && !allowed.includes(v)) fail(`${IHC.EXTRA_FIELDS.find(([x]) => x === k)[1]}: choose one of ${allowed.filter(Boolean).join(', ')}.`);
+      return v || dflt;
+    };
+    out.clone = body.clone === undefined ? (base.clone ?? '') : text(body.clone, 60);
+    out.host = pick('host', IHC.HOSTS_LIST);
+    out.clonality = pick('clonality', IHC.CLONALITIES);
+    out.platformSet = pick('platformSet', IHC.PLATFORMS);
+    out.chromogenSet = pick('chromogenSet', IHC.CHROMOGENS);
+    out.visibility = pick('visibility', IHC.VISIBILITY.map(([k]) => k), 'Public');
+    out.result = pick('result', IHC.RESULTS.map(([k]) => k));
+    out.preferred = body.preferred === undefined ? !!base.preferred : body.preferred === true || body.preferred === 'true' || body.preferred === 'Yes';
     return out;
   }
+  const EXTRA_KEYS = IHC.EXTRA_FIELDS.map(([k]) => k);
+  const shown = (k, v) => (k === 'preferred' ? (v ? 'Yes' : 'No') : k === 'result' ? IHC.resultLabel(v) : k === 'visibility' ? (v === 'Internal' ? 'Not public' : 'Public')
+    : (k === 'platformSet' || k === 'chromogenSet') && !v ? 'worked out from the text' : v || '(blank)');
 
   function addAssay({ body }) {
     const fields = readAssayFields(body);
@@ -1563,18 +1650,26 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   function editAssay({ params, body }) {
     const a = getAssay(params[0]);
     const fields = readAssayFields(body, a);
-    const changed = IHC.ASSAY_FIELDS.filter(([k]) => fields[k] !== a[k]).map(([k, label]) => `${label}: ${a[k] || '(blank)'} → ${fields[k] || '(blank)'}`);
+    if (a.components) fields.chromogenSet = '';   // a double stain's chromogen comes from its two protocols
+    const changed = [...IHC.ASSAY_FIELDS, ...IHC.EXTRA_FIELDS].filter(([k]) => (EXTRA_KEYS.includes(k) ? shown(k, fields[k]) !== shown(k, a[k]) : fields[k] !== a[k]))
+      .map(([k, label]) => (EXTRA_KEYS.includes(k) ? `${label}: ${shown(k, a[k])} → ${shown(k, fields[k])}` : `${label}: ${a[k] || '(blank)'} → ${fields[k] || '(blank)'}`));
     const notes = body.notes === undefined ? a.notes : text(body.notes, 1000);
-    if (!changed.length && notes === a.notes) return { id: a.id, changed: 0 };
+    const notesChanged = notes !== a.notes;
+    if (!changed.length && !notesChanged) return { id: a.id, changed: 0 };
     const derived = IHC.deriveAssay(fields);
     delete derived.speciesOther;
-    Object.assign(a, fields, a.components ? { speciesTags: derived.speciesTags, fixTags: derived.fixTags } : derived, { notes, updatedAt: clock.now() });
+    // A double stain keeps the kind and plex built from its two protocols; only its tags and a platform set by hand change
+    // (the built platform is kept, so clearing the choice restores it).
+    if (a.components) {
+      a.platformBuilt ??= a.platform;
+      Object.assign(a, fields, { speciesTags: derived.speciesTags, fixTags: derived.fixTags, platform: IHC.PLATFORMS.includes(fields.platformSet) ? fields.platformSet : a.platformBuilt, notes, updatedAt: clock.now() });
+    } else Object.assign(a, fields, derived, { notes, updatedAt: clock.now() });
     // Editing a repaired field counts as checking it.
     if (fields.dilution !== undefined && changed.some((c) => c.startsWith('Dilution'))) a.flags = a.flags.filter((f) => f !== 'dilution-recovered');
-    if (changed.some((c) => c.startsWith('Antibody'))) a.flags = a.flags.filter((f) => f !== 'name-recovered');
+    if (changed.some((c) => c.startsWith('Antibody:'))) a.flags = a.flags.filter((f) => f !== 'name-recovered');
     if (a.species) a.flags = a.flags.filter((f) => f !== 'species-blank');
     if (a.retrieval) a.flags = a.flags.filter((f) => f !== 'retrieval-blank');
-    audit('ASSAY_EDITED', 'assay', a.id, changed.join('; ') || 'Notes');
+    audit('ASSAY_EDITED', 'assay', a.id, [...changed, ...(notesChanged ? ['Notes'] : [])].join('; '));
     commit();
     return { id: a.id, changed: changed.length };
   }
@@ -1607,7 +1702,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   // ---------- IHC requests from the web form ----------
   // The investigator form (the old phlrequest.ncifcrf.gov MH request) submits here; the IHC team reviews and
-  // accepts it, which creates a LIMS request with PHL numbers and an estimate.
+  // accepts it, which creates a LIMS request with MHL numbers and an estimate.
   const speciesCode = (s) => IHC.REQUEST_SPECIES.find(([k]) => k === s)?.[2] || 'OTHER';
   const stainLookup = (w) => (id) => w?.stains?.find((s) => s.assayId === Number(id))?.snapshot || assayById(id);
 
@@ -1638,6 +1733,8 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
         const a = assayById(s.assayId);
         if (!a) { problems.push(`Assay #${s.assayId} is not in the catalog.`); continue; }
         if (a.status !== 'Active') problems.push(`${a.name} (#${a.id}) is ${a.status.toLowerCase()} and can no longer be requested.`);
+        // The investigator form (strict) only offers public protocols; staff can still choose any.
+        if (strict && a.visibility === 'Internal') problems.push(`${a.name} (#${a.id}) is not offered to investigators; ask the IHC team.`);
         const chromogen = IHC.isFluorescent(a) ? a.chromogen : ['DAB', 'Red'].includes(s.chromogen) ? s.chromogen : (a.chromogen === 'Red' ? 'Red' : 'DAB');
         draft.stains.push({ assayId: a.id, chromogen, newAntibody: null });
       } else if (s.newAntibody) {
@@ -1687,8 +1784,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       ...draft,
       stains: draft.stains.map((s) => {
         const a = s.assayId ? assayById(s.assayId) : null;
-        const snapshot = a ? { id: a.id, ...Object.fromEntries(IHC.ASSAY_FIELDS.map(([k]) => [k, a[k]])), kind: a.kind, plex: a.plex, chromogen: a.chromogen, speciesTags: a.speciesTags, fixTags: a.fixTags, status: a.status } : null;
-        return { ...s, snapshot };
+        return { ...s, snapshot: a ? assaySnapshot(a) : null };
       }),
       copiedFrom: body.copiedFrom ? Number(body.copiedFrom) || null : null,
       requestId: null, acceptedBy: null, acceptedAt: null, declinedBy: null, declinedAt: null, declineReason: '',
@@ -1718,7 +1814,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     return { requests: rows };
   }
 
-  // A block number the investigator gave that is already a PHL number in the LIMS (PHL# with or without its letter).
+  // A block number the investigator gave that is already an MHL number in the LIMS (MHL# with or without its letter).
   function blockMatch(blockNo, excludeRequestId = null) {
     const b = String(blockNo || '').toUpperCase().replace(/\s+/g, '');
     if (b.length < 6) return null;
@@ -1739,7 +1835,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       request: w,
       stains: w.stains.map((s) => {
         const a = s.assayId ? assayById(s.assayId) : null;
-        return { ...s, current: a ? assaySummary(a) : null, changedSince: a ? (a.updatedAt || '') > w.submittedAt : false };
+        return { ...s, current: a ? assaySummary(a) : null, changedSince: a ? (a.updatedAt || '') > (s.snapshotAt || w.submittedAt) : false };
       }),
       estimate: priceEstimate(w, lookup, { addOn: !!w.addOn }), warnings: IHC.requestWarnings(w, assayById, w.submittedOn), summary: IHC.summarize(w, lookup), matches,
       linked: req ? { id: req.id, number: req.number, status: req.status } : null,
@@ -1770,7 +1866,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     });
     w.status = 'Accepted'; w.requestId = request.id; w.acceptedBy = by(); w.acceptedAt = clock.now();
     audit('IHC_ACCEPTED', 'ihc', w.id, `Accepted as ${request.number}${nas ? ` with NAS# ${nas.number}` : ', NAS request to be linked'}`);
-    audit('REQUEST_CREATED', 'request', request.id, `${request.number} from IHC request ${w.number}${nas ? ` and NAS# ${nas.number}` : ''}, ${phls.length} PHL numbers`);
+    audit('REQUEST_CREATED', 'request', request.id, `${request.number} from IHC request ${w.number}${nas ? ` and NAS# ${nas.number}` : ''}, ${phls.length} MHL numbers`);
     commit();
     return { id: request.id, number: request.number, phls };
   }
@@ -1786,6 +1882,129 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     return { ok: true };
   }
 
+  // Change the stains on an IHC request: replace a wrong protocol (say a human CD8 chosen for mouse tissue), add a stain
+  // to work already under way, or remove one. Allowed while it waits for review and once accepted, while the request is
+  // open and the work is not done. Stains that stay keep the protocol (and status) as it was when they were requested;
+  // only new ones are checked against the catalog as it is now. On an accepted request the request's estimate changes by
+  // the difference, code by code; lines the change does not touch keep their prices.
+  function changeIhcStains({ params, body }) {
+    const w = getWeb(params[0]);
+    if (w.status === 'Declined') fail(`${w.number} was declined; its stains cannot be changed.`);
+    const r = w.status === 'Accepted' ? getRequest(w.requestId) : null;
+    if (r && r.status !== 'Open') fail(`Request ${r.number} is ${r.status.toLowerCase()}; the stains on ${w.number} can no longer be changed.`);
+    if (r && (w.workStatus || 'Not started') === 'Done') fail(`${w.number} is marked done. Set its work back to In progress before changing the stains.`);
+    const reason = text(body.reason, 300);
+    if (r && !reason) fail('Give a reason for the change (for example, "wrong species: mouse CD8 instead of human"). It is kept in the history.');
+    const asked = (Array.isArray(body.stains) ? body.stains : []).slice(0, 20);
+    if (!asked.length && !w.he.on && !w.unstained.on) fail('Keep at least one stain, or H&E or unstained slides.');
+
+    const label = (s) => (s.snapshot ? `${s.snapshot.name} #${s.snapshot.id} (${s.snapshot.species || 'species not recorded'}${s.snapshot.fixative ? `, ${s.snapshot.fixative}` : ''})` : `${s.newAntibody.name} (not in catalog)`);
+    const brightChromogen = (want, fallback) => (['DAB', 'Red'].includes(want) ? want : fallback);
+    const remaining = [...w.stains];
+    const pairs = [];   // [old stain, new stain] for stains that stay
+    const added = [];
+    const problems = [];
+    const next = [];
+    for (const s of asked) {
+      if (s.assayId) {
+        const i = remaining.findIndex((o) => o.assayId === Number(s.assayId));
+        if (i >= 0) {
+          const o = remaining.splice(i, 1)[0];
+          const kept = { ...o, chromogen: o.snapshot && IHC.isFluorescent(o.snapshot) ? o.chromogen : brightChromogen(s.chromogen, o.chromogen) };
+          pairs.push([o, kept]); next.push(kept);
+          continue;
+        }
+        const a = assayById(s.assayId);
+        if (!a) { problems.push(`Assay #${s.assayId} is not in the catalog.`); continue; }
+        if (a.status !== 'Active') { problems.push(`${a.name} (#${a.id}) is ${a.status.toLowerCase()} and can no longer be requested.`); continue; }
+        const fresh = { assayId: a.id, chromogen: IHC.isFluorescent(a) ? a.chromogen : brightChromogen(s.chromogen, a.chromogen === 'Red' ? 'Red' : 'DAB'), newAntibody: null,
+          snapshot: assaySnapshot(a), snapshotAt: clock.now(), addedBy: by() };
+        added.push(fresh); next.push(fresh);
+      } else if (s.newAntibody) {
+        const na = s.newAntibody;
+        const item = { name: text(na.name, 120), manufacturer: text(na.manufacturer, 120), catalog: text(na.catalog, 60), host: text(na.host, 60), supplied: !!na.supplied, notes: text(na.notes, 500) };
+        if (!item.name) { problems.push('Give the name of the new antibody.'); continue; }
+        if (!item.manufacturer) { problems.push(`Give the manufacturer of ${item.name}.`); continue; }
+        const i = remaining.findIndex((o) => o.newAntibody && o.newAntibody.name.toLowerCase() === item.name.toLowerCase());
+        if (i >= 0) {
+          const o = remaining.splice(i, 1)[0];
+          const kept = { ...o, chromogen: brightChromogen(s.chromogen, o.chromogen), newAntibody: { ...o.newAntibody, ...item } };
+          pairs.push([o, kept]); next.push(kept);
+          continue;
+        }
+        const fresh = { assayId: null, chromogen: brightChromogen(s.chromogen, 'DAB'), newAntibody: item, snapshot: null, snapshotAt: clock.now(), addedBy: by() };
+        added.push(fresh); next.push(fresh);
+      }
+    }
+    if (problems.length) fail(problems.join(' '));
+    if (!next.length && !w.he.on && !w.unstained.on) fail('Keep at least one stain, or H&E or unstained slides.');
+
+    const parts = [];
+    if (remaining.length === 1 && added.length === 1) parts.push(`Replaced ${label(remaining[0])} with ${label(added[0])}`);
+    else {
+      if (remaining.length) parts.push(`Removed ${remaining.map(label).join(', ')}`);
+      if (added.length) parts.push(`Added ${added.map(label).join(', ')}`);
+    }
+    for (const [o, k] of pairs) {
+      if (o.chromogen !== k.chromogen) parts.push(`${label(k)}: chromogen ${o.chromogen} → ${k.chromogen}`);
+      if (o.newAntibody) {
+        const diff = ['manufacturer', 'catalog', 'host', 'supplied', 'notes'].filter((f) => (o.newAntibody[f] ?? '') !== (k.newAntibody[f] ?? ''))
+          .map((f) => (f === 'supplied' ? `supplied by the investigator: ${k.newAntibody.supplied ? 'yes' : 'no'}` : `${f}: ${k.newAntibody[f] || '(blank)'}`));
+        if (diff.length) parts.push(`${label(k)}: ${diff.join(', ')}`);
+      }
+    }
+    if (!parts.length) {
+      const sameOrder = next.length === w.stains.length && next.every((s, i) => s === pairs.find(([o]) => o === w.stains[i])?.[1]);
+      if (sameOrder) fail('Nothing changed.');
+      parts.push('Stains put in a new order');
+    }
+
+    const before = r ? IHC.estimateIhc(w, stainLookup(w), { addOn: !!w.addOn }) : null;
+    w.stains = next;
+    const result = { ok: true, change: parts.join('; ') };
+    if (r) {
+      const after = IHC.estimateIhc(w, stainLookup(w), { addOn: !!w.addOn });
+      const was = r.estimateTotal;
+      const key = (l) => `${l.section}|${l.code}`;
+      const delta = new Map();
+      for (const l of before.lines) delta.set(key(l), (delta.get(key(l)) || 0) - l.units);
+      for (const l of after.lines) delta.set(key(l), (delta.get(key(l)) || 0) + l.units);
+      const cat = catalog(); const notPriced = [];
+      const reprice = (section, code, units) => {
+        try { const e = R.estimateLine(cat, { section, code, units, date: clock.today() }); return { section: e.section, code: e.code, description: e.description, units: e.units, unitPrice: e.unitPrice, amount: e.amount }; }
+        catch (e) { notPriced.push(`${code}: ${e.message}`); return null; }
+      };
+      // Fewer units come off the request's lines with that code in order (a code can be on more than one line);
+      // more units go on the first line with that code, or on a new line.
+      const lines = [];
+      for (const l of r.estimateLines) {
+        const k = key(l); let d = delta.get(k) || 0;
+        if (!d) { lines.push(l); continue; }
+        let units = l.units;
+        if (d < 0) { const take = Math.min(units, -d); units -= take; d += take; } else { units += d; d = 0; }
+        delta.set(k, d);
+        if (units > 0) { const p = units === l.units ? l : reprice(l.section, l.code, units); if (p) lines.push(p); }
+      }
+      for (const [k, d] of delta) {
+        if (d <= 0) continue;
+        const [section, code] = k.split('|');
+        const p = reprice(section, code, d);
+        if (p) lines.push(p);
+      }
+      if (notPriced.length) fail(`The estimate could not be updated, so the stains were not changed: ${notPriced.join('; ')}.`);
+      r.estimateLines = lines;
+      r.estimateTotal = R.sumMoney(lines.map((l) => l.amount));
+      if (w.source !== 'NEW_REQUEST') r.description = text(IHC.summarize(w, stainLookup(w)), 1000);
+      if (r.estimateTotal !== was) audit('REQUEST_ESTIMATE_CHANGED', 'request', r.id, `${r.number}: estimate $${was.toFixed(2)} → $${r.estimateTotal.toFixed(2)} after a stain change on ${w.number}`);
+      Object.assign(result, { estimateBefore: was, estimateAfter: r.estimateTotal });
+      const nas = nasOf(r);
+      if (nas) { const u = nasUsage(nas); if (u.remaining < 0) result.warning = `The requests on NAS# ${nas.number} are now estimated at $${u.committed.toFixed(2)}, more than the $${nas.authorized.toFixed(2)} authorized.`; }
+    }
+    audit('IHC_STAINS_CHANGED', 'ihc', w.id, `${parts.join('; ')}${reason ? `. Reason: ${reason}` : ''}`);
+    commit();
+    return result;
+  }
+
   // Bench worksheet for an accepted IHC request: every block with every stain and its protocol as requested.
   function ihcWorksheet({ params }) {
     const r = getRequest(params[0]);
@@ -1799,7 +2018,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       return { ...s, phl: subj?.phl || '', source: src ? { phl: src.phl, requestId: srcReq.id, requestNumber: srcReq.number } : null };
     });
     const stains = w.stains.map((s) => ({
-      ...s, protocol: s.snapshot, changedSince: s.assayId ? (assayById(s.assayId)?.updatedAt || '') > w.submittedAt : false,
+      ...s, protocol: s.snapshot, changedSince: s.assayId ? (assayById(s.assayId)?.updatedAt || '') > (s.snapshotAt || w.submittedAt) : false,
       kindLabel: s.snapshot ? IHC.kindLabel(s.snapshot) : 'New antibody',
     }));
     return { request: { id: r.id, number: r.number, piName: piName(r.pi), due: r.due }, web: { id: w.id, number: w.number, pathologist: w.pathologist, submittedOn: w.submittedOn, he: w.he, unstained: w.unstained, scan: w.scan, additional: w.additional, species: w.species, fixativeUsed: w.fixativeUsed, fixDate: w.fixDate }, blocks, stains };
@@ -1929,7 +2148,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   // SEND-style microscopic findings for a study's signed cases. A convenience table, not a validated SEND dataset.
   function studySendMi({ params }) {
     const s = getStudy(params[0]);
-    const rows = [['STUDYID', 'USUBJID', 'PHL', 'GROUP', 'SEX', 'MISEQ', 'MISPEC', 'MIORRES', 'MISTRESC', 'MIRESCAT', 'MISEV', 'MILAT', 'MIDISTR (not SEND)', 'Coded against SEND CT']];
+    const rows = [['STUDYID', 'USUBJID', 'MHL', 'GROUP', 'SEX', 'MISEQ', 'MISPEC', 'MIORRES', 'MISTRESC', 'MIRESCAT', 'MISEV', 'MILAT', 'MIDISTR (not SEND)', 'Coded against SEND CT']];
     for (const a of state.subjects.filter((x) => x.studyId === s.id).sort((x, y) => x.phl.localeCompare(y.phl))) {
       const c = state.pathology[a.id];
       if (c?.status !== 'SIGNED') continue;
@@ -2146,7 +2365,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   const getCytology = (id) => BWS().cytology.find((c) => c.id === Number(id)) || (() => { throw new HttpError(404, 'Cytology record not found.'); })();
   const instrumentName = (code) => BW.INSTRUMENTS[code]?.name || code;
 
-  // The sample ID typed on the analyzer is the PHL number; also accept it without the letter when only one PHL# fits.
+  // The sample ID typed on the analyzer is the MHL number; also accept it without the letter when only one MHL# fits.
   function subjectByPhl(sampleId) {
     const n = BW.normalizeSampleId(sampleId);
     if (n.length < 6) return null;
@@ -2268,9 +2487,9 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function assignResult({ params, body }) {
     const r = getResult(params[0]);
-    if (!['UNMATCHED', 'TO_REVIEW'].includes(r.status)) fail('Only results that are not yet released can be assigned to a PHL number.');
+    if (!['UNMATCHED', 'TO_REVIEW'].includes(r.status)) fail('Only results that are not yet released can be assigned to an MHL number.');
     const subject = subjectByPhl(body.phl);
-    if (!subject) fail(`${text(body.phl, 20) || 'That'} is not a PHL number in the LIMS.`);
+    if (!subject) fail(`${text(body.phl, 20) || 'That'} is not an MHL number in the LIMS.`);
     r.subjectId = subject.id; r.status = 'TO_REVIEW';
     r.history.push({ at: clock.now(), by: by(), action: `Assigned to ${subject.phl} (analyzer ID "${r.sampleId}")` });
     audit('BLOODWORK_ASSIGNED', 'request', subject.requestId, `${subject.phl}: ${r.kind.toLowerCase()} result with sample ID "${r.sampleId}"`);
@@ -2280,7 +2499,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function releaseResult({ params, body }) {
     const r = getResult(params[0]);
-    if (r.status !== 'TO_REVIEW') fail(r.status === 'UNMATCHED' ? 'Assign the result to a PHL number first.' : `This result is ${r.status.toLowerCase()}.`);
+    if (r.status !== 'TO_REVIEW') fail(r.status === 'UNMATCHED' ? 'Assign the result to an MHL number first.' : `This result is ${r.status.toLowerCase()}.`);
     const subject = getSubject(r.subjectId);
     const req = requestOf(subject);
     const code = BW.INSTRUMENTS[r.instrument]?.charge;
@@ -2354,7 +2573,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function createCytology({ body }) {
     const subject = body.subjectId ? getSubject(body.subjectId) : subjectByPhl(body.phl);
-    if (!subject) fail(`${text(body.phl, 20) || 'That'} is not a PHL number in the LIMS.`);
+    if (!subject) fail(`${text(body.phl, 20) || 'That'} is not an MHL number in the LIMS.`);
     if (!BW.CYTOLOGY_SPECIMENS.includes(body.specimen)) fail('Choose the specimen.');
     const c = { id: nextId(), subjectId: subject.id, specimen: body.specimen, stain: BW.CYTOLOGY_STAINS[0], collectedOn: clock.today(), counts: {}, rbc: {}, nrbc: null, platelets: '',
       description: '', interpretation: '', status: 'DRAFT', version: 1, pathologist: by(), signedBy: null, signedAt: null, versions: [], amendments: [],
@@ -2476,7 +2695,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function studyBloodworkCsv({ params }) {
     const s = getStudy(params[0]);
-    const rows = [['ZAP', 'PHL', 'Animal', 'Group', 'Sex', 'Kind', 'Instrument', 'Date', 'Time', 'Analyte', 'Value', 'Unit', 'Instrument flag', 'Range low', 'Range high', 'Range source', 'Flag']];
+    const rows = [['ZAP', 'MHL', 'Animal', 'Group', 'Sex', 'Kind', 'Instrument', 'Date', 'Time', 'Analyte', 'Value', 'Unit', 'Instrument flag', 'Range low', 'Range high', 'Range source', 'Flag']];
     for (const a of state.subjects.filter((x) => x.studyId === s.id).sort((x, y) => x.phl.localeCompare(y.phl))) {
       for (const r of BWS().results.filter((x) => x.subjectId === a.id && x.status === 'RELEASED')) {
         for (const v of analyteView(r, a)) rows.push([s.zap, a.phl, a.label, a.groupCode, a.sex, r.kind, instrumentName(r.instrument), r.testedOn, r.testedAt,
@@ -2586,8 +2805,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   // ---------- IHC ordered with a new request ----------
   const stainSnapshot = (s) => {
     const a = s.assayId ? assayById(s.assayId) : null;
-    const snapshot = a ? { id: a.id, ...Object.fromEntries(IHC.ASSAY_FIELDS.map(([k]) => [k, a[k]])), kind: a.kind, plex: a.plex, chromogen: a.chromogen, speciesTags: a.speciesTags, fixTags: a.fixTags, status: a.status } : null;
-    return { ...s, snapshot };
+    return { ...s, snapshot: a ? assaySnapshot(a) : null };
   };
   const IHC_SPECIES_OF = { MOUSE: 'Mouse', RAT: 'Rat', HUMAN: 'Human', PDX: 'PDX', ORGANOID: 'Organoid' };
   const IHC_FIXATIVE_OF = { '10%NBF': '10% NBF', '4%PFA': '4% PFA', FRESH: 'Fresh frozen (OCT)' };
@@ -3014,8 +3232,8 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   }
 
   // ---------- Xenium runs ----------
-  // A run is two Xenium slides with sections of PHL numbers waiting in the Xenium work area. It is assigned to someone,
-  // goes through the steps in xenium.mjs, and on delivery the PHL numbers move on. The CY2027 list has no Xenium code,
+  // A run is two Xenium slides with sections of MHL numbers waiting in the Xenium work area. It is assigned to someone,
+  // goes through the steps in xenium.mjs, and on delivery the MHL numbers move on. The CY2027 list has no Xenium code,
   // so runs make no charges (open question).
   const XRUNS = () => state.xenium.runs;
   const getRun = (id) => XRUNS().find((x) => x.id === Number(id)) || (() => { throw new HttpError(404, 'Xenium run not found.'); })();
@@ -3168,7 +3386,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   // ---------- whole-slide imaging ----------
   // Images are registered from what the scanners write (file headers read in the browser or by the server), matched to
-  // PHL numbers by barcode or file name, reviewed (pass, or rescan with a reason), and a pass creates the scan charge.
+  // MHL numbers by barcode or file name, reviewed (pass, or rescan with a reason), and a pass creates the scan charge.
   const WSI = () => state.wsi;
   const getImage = (id) => WSI().images.find((x) => x.id === Number(id)) || (() => { throw new HttpError(404, 'Slide image not found.'); })();
   const getScanner = (id) => WSI().scanners.find((x) => x.id === id) || null;
@@ -3312,7 +3530,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     if (!['UNMATCHED', 'TO_REVIEW'].includes(x.status)) fail('Only images not yet reviewed can be assigned.');
     const id = WSIX.parseSlideId(body.phl);
     const subject = id ? subjectByPhl(id.hasLetter ? id.phl : id.digits) : subjectByPhl(body.phl);
-    if (!subject) fail(`${text(body.phl, 30) || 'That'} is not a PHL number in the LIMS.`);
+    if (!subject) fail(`${text(body.phl, 30) || 'That'} is not an MHL number in the LIMS.`);
     Object.assign(x, { subjectId: subject.id, status: 'TO_REVIEW', block: text(body.block || id?.block || x.block, 6), slide: text(body.slide || id?.slide || x.slide, 6) });
     x.history.push({ at: clock.now(), by: by(), action: `Assigned to ${subject.phl}${x.block ? ` block ${x.block}` : ''}${x.slide ? ` slide ${x.slide}` : ''}` });
     audit('WSI_ASSIGNED', 'request', subject.requestId, `${subject.phl}: ${x.fileName}`);
@@ -3333,7 +3551,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
 
   function passImage({ params, body }) {
     const x = getImage(params[0]);
-    if (x.status !== 'TO_REVIEW') fail(x.status === 'UNMATCHED' ? 'Assign the image to a PHL number first.' : `This image is ${x.status === 'PASSED' ? 'already passed' : 'marked for rescan'}.`);
+    if (x.status !== 'TO_REVIEW') fail(x.status === 'UNMATCHED' ? 'Assign the image to an MHL number first.' : `This image is ${x.status === 'PASSED' ? 'already passed' : 'marked for rescan'}.`);
     const subject = getSubject(x.subjectId);
     const req = requestOf(subject);
     const { code } = WSIX.scanCharge(x.scannerId, x);
@@ -3398,10 +3616,10 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     return { scanner: s };
   }
 
-  // Scanning is done for these PHL numbers: they move on to the next work area.
+  // Scanning is done for these MHL numbers: they move on to the next work area.
   function completeScanning({ body }) {
     const ids = (Array.isArray(body.subjectIds) ? body.subjectIds : []).map(Number);
-    if (!ids.length) fail('Choose PHL numbers.');
+    if (!ids.length) fail('Choose MHL numbers.');
     const moved = [];
     for (const id of ids) {
       const s = getSubject(id);
@@ -3516,6 +3734,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     ['GET', /^\/api\/requests\/(\d+)\/pathology\.csv$/, ({ params }) => { const r = getRequest(params[0]); return pathologyCsv(subjectsOf(r), `${r.number}-pathology.csv`); }],
     ['POST', /^\/api\/requests\/(\d+)\/add-pathology$/, addPathologyArea],
     ['GET', /^\/api\/ihc\/assays$/, listAssays],
+    ['GET', /^\/api\/ihc\/choices$/, assayChoices],
     ['POST', /^\/api\/ihc\/assays$/, addAssay],
     ['GET', /^\/api\/ihc\/assays\/(\d+)$/, assayDetail],
     ['PATCH', /^\/api\/ihc\/assays\/(\d+)$/, editAssay],
@@ -3528,6 +3747,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     ['GET', /^\/api\/ihc\/requests\/(\d+)$/, ihcDetail],
     ['POST', /^\/api\/ihc\/requests\/assign$/, assignIhc],
     ['POST', /^\/api\/ihc\/requests\/(\d+)\/work$/, ihcWork],
+    ['PUT', /^\/api\/ihc\/requests\/(\d+)\/stains$/, changeIhcStains],
     ['GET', /^\/api\/xenium$/, listXenium],
     ['POST', /^\/api\/xenium\/runs$/, createRun],
     ['GET', /^\/api\/xenium\/runs\/(\d+)$/, runDetail],

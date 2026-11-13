@@ -33,7 +33,7 @@ export async function renderPathWorklist(app) {
               ${r.zap ? `<a href="#/study/${r.studyId}?view=pathology">${esc(r.zap)}</a>` : `<span class="small muted">${esc(r.type)}</span>`}
               <span class="spacer"></span><span class="small muted">Due ${fmtDate(r.due)} · ${r.signed} of ${r.subjects.length} signed out</span></div>
             ${r.studyTitle ? `<p class="small muted" style="margin:4px 0 6px">${esc(r.studyTitle)}</p>` : ''}
-            <table class="t"><thead><tr><th><input type="checkbox" data-all="${r.requestId}" aria-label="Select all cases in ${esc(r.number)}"></th><th>PHL#</th><th>Animal or sample</th><th>Group</th><th>Slides</th><th>Pathologist</th><th>Report</th><th></th></tr></thead><tbody>
+            <table class="t"><thead><tr><th><input type="checkbox" data-all="${r.requestId}" aria-label="Select all cases in ${esc(r.number)}"></th><th>MHL#</th><th>Animal or sample</th><th>Group</th><th>Slides</th><th>Pathologist</th><th>Report</th><th></th></tr></thead><tbody>
               ${r.subjects.map((s) => `<tr>
                 <td class="mid"><input type="checkbox" class="pick" value="${s.id}" data-r="${r.requestId}" aria-label="Select ${esc(s.phl)}"></td>
                 <td class="code">${esc(s.phl)} ${s.priority === 'S' ? '<span class="badge stat">STAT</span>' : ''}</td>

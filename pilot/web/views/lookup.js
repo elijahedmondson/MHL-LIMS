@@ -1,4 +1,4 @@
-// Look up: one search across requests, PHL numbers, ZAP numbers, NAS numbers and investigators.
+// Look up: one search across requests, MHL numbers, ZAP numbers, NAS numbers and investigators.
 import { $, $$, api, esc, money, fmtDate, getMeta, areaName, pageTop, kindBadge } from '../ui.js';
 
 let timer = null;
@@ -27,10 +27,10 @@ export async function renderLookup(app, q) {
   app.innerHTML = `
     <section class="finder">
       <h1>Find any request, animal or study</h1>
-      <p class="muted">One search across request numbers, PHL numbers, ZAP numbers, NAS numbers, IHC request numbers, investigators and the IHC antibody catalog.</p>
+      <p class="muted">One search across request numbers, MHL numbers, ZAP numbers, NAS numbers, IHC request numbers, investigators and the IHC antibody catalog.</p>
       <form class="search" role="search">
         <label class="sr" for="q" hidden>Search</label>
-        <input id="q" name="q" autocomplete="off" placeholder="PHL#, ZAP#, NAS#, request #, investigator or antibody" value="${esc(q)}" aria-label="Search">
+        <input id="q" name="q" autocomplete="off" placeholder="MHL#, ZAP#, NAS#, request #, investigator or antibody" value="${esc(q)}" aria-label="Search">
         <button class="btn" type="submit">Search</button>
       </form>
       <div class="try">Try ${examples.map((e) => `<button class="chip" type="button" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
@@ -40,7 +40,7 @@ export async function renderLookup(app, q) {
       <h2>Open requests</h2>
       ${open.requests.length ? `<p class="small muted">Charged so far counts every charge that is not void, released for billing or not. The estimate is the one sent back to NAS when the request was created.</p>
       <div class="scroll-x"><table class="t">
-        <thead><tr><th>Request</th><th>Investigator</th><th>Type</th><th>Due</th><th>Where the PHL numbers are</th><th>Charged so far vs NAS estimate</th><th class="n">Charges to review</th></tr></thead>
+        <thead><tr><th>Request</th><th>Investigator</th><th>Type</th><th>Due</th><th>Where the MHL numbers are</th><th>Charged so far vs NAS estimate</th><th class="n">Charges to review</th></tr></thead>
         <tbody>${open.requests.map((r) => `
           <tr class="click" data-href="#/request/${r.id}">
             <td><a class="idtxt" href="#/request/${r.id}">${esc(r.number)}</a>${r.restricted ? ' <span class="restricted">Restricted</span>' : ''}</td>

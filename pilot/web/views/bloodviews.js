@@ -12,7 +12,7 @@ const rangeText = (r) => (r ? `${r.low ?? ''}–${r.high ?? ''}${r.source === 'l
 
 function resultsTable(rows, { assign = false } = {}) {
   if (!rows.length) return '<p class="empty">None.</p>';
-  return `<table class="t"><thead><tr><th>${assign ? 'Sample ID on the analyzer' : 'PHL#'}</th><th>${assign ? 'File' : 'Animal'}</th><th>Kind</th><th>Instrument</th><th>Tested</th><th class="n">Flags</th><th>Status</th><th></th></tr></thead><tbody>
+  return `<table class="t"><thead><tr><th>${assign ? 'Sample ID on the analyzer' : 'MHL#'}</th><th>${assign ? 'File' : 'Animal'}</th><th>Kind</th><th>Instrument</th><th>Tested</th><th class="n">Flags</th><th>Status</th><th></th></tr></thead><tbody>
     ${rows.map((r) => `<tr class="click" data-href="#/bloodwork/result/${r.id}">
       <td class="code">${assign ? esc(r.sampleId || '(blank)') : `${esc(r.phl || '')}${r.zap ? `<br><span class="small muted">${esc(r.zap)}</span>` : ''}`}</td>
       <td class="small">${assign ? esc(r.fileName) : `${esc(r.label)}${r.groupCode ? `, ${esc(r.groupCode)}` : ''}${r.requestNumber ? `<br><span class="muted">${esc(r.requestNumber)}</span>` : ''}`}</td>
@@ -27,7 +27,7 @@ export async function renderBloodwork(app, tab = 'review') {
   const tabs = [['review', `To review (${home.toReview.length + home.unmatched.length})`], ['import', 'Import results'], ['cytology', `Cytology (${home.cytology.length})`], ['ranges', 'Reference ranges'], ['recent', 'Released']];
   app.innerHTML = `
     <h1>Bloodwork</h1>
-    <p class="muted">Hematology from the Genesis analyzer, chemistry from the VetScan VS2 and Piccolo, and cytology. Results are matched to animals by the PHL number typed on the analyzer, reviewed, then released, which creates the charge.</p>
+    <p class="muted">Hematology from the Genesis analyzer, chemistry from the VetScan VS2 and Piccolo, and cytology. Results are matched to animals by the MHL number typed on the analyzer, reviewed, then released, which creates the charge.</p>
     <nav class="subtabs" aria-label="Bloodwork sections">${tabs.map(([k, l]) => `<a href="#/bloodwork/${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
     <div id="bw" class="section"></div>`;
   pageTop(app);
@@ -44,8 +44,8 @@ export async function renderBloodwork(app, tab = 'review') {
       <h2>Results to review</h2>
       <p class="small muted">Check each result against the printout and the animal, then release it. Flags are the instrument's (H or L on the printout) and the lab's, from the reference ranges.</p>
       ${resultsTable(home.toReview)}
-      <h2 class="section">Sample IDs that are not PHL numbers</h2>
-      <p class="small muted">Usually a typing slip on the analyzer. Open the result and assign it to the right PHL number.</p>
+      <h2 class="section">Sample IDs that are not MHL numbers</h2>
+      <p class="small muted">Usually a typing slip on the analyzer. Open the result and assign it to the right MHL number.</p>
       ${resultsTable(home.unmatched, { assign: true })}`;
   }
   $$('tr.click', box).forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('a,button')) location.hash = tr.dataset.href; }));
@@ -198,8 +198,8 @@ export async function renderBloodResult(app, id) {
       </div>
       <div>
         ${r.status === 'UNMATCHED' || r.status === 'TO_REVIEW' ? `
-          <h2>${r.status === 'UNMATCHED' ? 'Assign to a PHL number' : 'Wrong animal?'}</h2>
-          <form class="form" id="assign" style="grid-template-columns:2fr 1fr"><div class="field"><label for="aphl">PHL#</label><input id="aphl" value="${esc(r.status === 'UNMATCHED' ? r.sampleId : d.subject?.phl || '')}" maxlength="20" style="text-transform:uppercase"></div>
+          <h2>${r.status === 'UNMATCHED' ? 'Assign to an MHL number' : 'Wrong animal?'}</h2>
+          <form class="form" id="assign" style="grid-template-columns:2fr 1fr"><div class="field"><label for="aphl">MHL#</label><input id="aphl" value="${esc(r.status === 'UNMATCHED' ? r.sampleId : d.subject?.phl || '')}" maxlength="20" style="text-transform:uppercase"></div>
             <div class="field"><span class="lbl">&nbsp;</span><div><button class="btn ${r.status === 'UNMATCHED' ? '' : 'quiet'}" type="submit">Assign</button></div></div></form>` : ''}
         ${r.status === 'TO_REVIEW' ? `
           <h2 class="section">Review</h2>
@@ -227,12 +227,12 @@ function cytologyTab(box, home, meta) {
   box.innerHTML = `
     <div class="split wide-left">
       <div><h2>Cytology</h2>
-        ${home.cytology.length ? `<table class="t"><thead><tr><th>PHL#</th><th>Specimen</th><th>Collected</th><th>Pathologist</th><th>Status</th></tr></thead><tbody>
+        ${home.cytology.length ? `<table class="t"><thead><tr><th>MHL#</th><th>Specimen</th><th>Collected</th><th>Pathologist</th><th>Status</th></tr></thead><tbody>
           ${home.cytology.map((c) => `<tr class="click" data-href="#/bloodwork/cytology/${c.id}"><td class="code"><a href="#/bloodwork/cytology/${c.id}">${esc(c.phl)}</a><br><span class="small muted">${esc(c.requestNumber)}</span></td>
             <td>${esc(c.specimen)}</td><td class="small">${fmtDate(c.collectedOn)}</td><td>${esc(c.pathologist)}</td><td>${c.status === 'SIGNED' ? `<span class="badge complete">Signed${c.version > 1 ? ` v${c.version}` : ''}</span>` : '<span class="badge warn">Draft</span>'}</td></tr>`).join('')}
         </tbody></table>` : '<p class="empty">No cytology yet.</p>'}</div>
       <div class="panel"><h2>New cytology</h2>
-        <form class="form" id="newcyto"><div class="field"><label for="cphl">PHL#</label><input id="cphl" maxlength="20" required style="text-transform:uppercase"></div>
+        <form class="form" id="newcyto"><div class="field"><label for="cphl">MHL#</label><input id="cphl" maxlength="20" required style="text-transform:uppercase"></div>
           <div class="field"><label for="cspec">Specimen</label><select id="cspec">${options(meta.bloodwork.specimens, 'Blood smear')}</select></div>
           <div><button class="btn" type="submit">Start</button></div></form>
         <p class="small muted">Blood and marrow smears get a differential count; marrow also an M:E ratio. Fluids and aspirates get a cell count and description.</p></div>
@@ -333,7 +333,7 @@ export async function renderBloodReport(app, subjectId) {
       <div class="rep-head"><div><div class="rep-lab">Molecular Histopathology Laboratory (MHL)</div><div class="small muted">Laboratory Animal Sciences Program, NCI at Frederick</div></div><div class="rep-title">Bloodwork report</div></div>
       <div class="rep-pilot">Pilot with test data: not a valid report</div>
       <table class="rep-facts"><tbody>
-        <tr><th>PHL#</th><td class="code">${esc(s.phl)}</td><th>Animal</th><td>${esc(s.label)}</td><th>Sex</th><td>${s.sex === 'F' ? 'Female' : s.sex === 'M' ? 'Male' : 'Not recorded'}</td></tr>
+        <tr><th>MHL#</th><td class="code">${esc(s.phl)}</td><th>Animal</th><td>${esc(s.label)}</td><th>Sex</th><td>${s.sex === 'F' ? 'Female' : s.sex === 'M' ? 'Male' : 'Not recorded'}</td></tr>
         <tr><th>Study</th><td>${d.study ? `${esc(d.study.zap)}<br><span class="small">${esc(d.study.title)}</span>` : 'None'}</td><th>Group</th><td>${esc(s.groupCode || 'None')}</td><th>Request</th><td>${esc(d.request.number)}<br><span class="small">${esc(d.request.piName)}</span></td></tr>
       </tbody></table>
       ${d.results.length ? d.results.map((r) => `

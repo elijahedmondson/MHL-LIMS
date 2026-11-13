@@ -236,8 +236,8 @@ export function rangeFor(code, species, ranges, printed) {
   return printed ? { ...printed, source: 'instrument' } : null;
 }
 
-// Normalizes a PHL number the way staff key it on the analyzer: upper case, no spaces.
-export const normalizeSampleId = (s) => String(s || '').toUpperCase().replace(/\s+/g, '').replace(/^PHL#?/, '');
+// Normalizes an MHL number the way staff key it on the analyzer: upper case, no spaces.
+export const normalizeSampleId = (s) => String(s || '').toUpperCase().replace(/\s+/g, '').replace(/^(?:PHL|MHL)#?/, '');   // labels may still carry the old PHL prefix
 
 // ---------- cytology ----------
 export const CYTOLOGY_SPECIMENS = ['Blood smear', 'Bone marrow smear', 'Bone marrow cytospin', 'Bronchoalveolar lavage', 'Pleural effusion', 'Peritoneal effusion',

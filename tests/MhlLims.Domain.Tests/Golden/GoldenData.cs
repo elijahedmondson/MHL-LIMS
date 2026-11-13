@@ -12,9 +12,11 @@ namespace MhlLims.Domain.Tests.Golden;
 internal sealed record GDilution(string Input, string Value, bool Recovered);
 internal sealed record GSpecies(string Input, List<string> Tags, List<string> Other);
 internal sealed record GFixative(string Input, List<string> Tags);
-internal sealed record GClassify(string Name, string Kit, string Kind, int Plex, string Chromogen, string Platform);
-internal sealed record GKindLabel(string Kind, int Plex, string Label);
-internal sealed record GAssay(int Id, string Name, string Kind, int Plex, string Status, List<string> SpeciesTags, List<string> FixTags);
+internal sealed record GClassify(string Name, string Kit, string? Dilution, string Kind, int Plex, string Chromogen, string Platform);
+internal sealed record GKindLabel(string Kind, int Plex, string? Chromogen, string Label);
+internal sealed record GDetectionResult(string Kind, int Plex, string Chromogen, string Platform);
+internal sealed record GApplyDetection(string Kind, string Chromogen, string Platform, string PlatformSet, string ChromogenSet, GDetectionResult Result);
+internal sealed record GAssay(int Id, string Name, string Kind, int Plex, string Status, List<string> SpeciesTags, List<string> FixTags, string? Chromogen);
 internal sealed record GFit(GAssay Assay, string Species, string Fixative, List<string> SampleTypes, List<string> Notes);
 internal sealed record GNewAntibody(string Name, bool Supplied);
 internal sealed record GStain(int? AssayId, GNewAntibody? NewAntibody);
@@ -49,7 +51,7 @@ internal sealed record GSummary(string Name, List<GSummaryCase> Cases, List<stri
 
 internal sealed record GoldenFile(
     List<GDilution> ExcelDilution, List<GDilution> ExcelDateName, List<GSpecies> SpeciesTags, List<GFixative> FixativeTags,
-    List<GClassify> Classify, List<GKindLabel> KindLabel, List<GFit> AssayFit, List<GIhcRequest> IhcRequests, List<GNecropsy> Necropsy,
+    List<GClassify> Classify, List<GKindLabel> KindLabel, List<GApplyDetection> ApplyDetection, List<GFit> AssayFit, List<GIhcRequest> IhcRequests, List<GNecropsy> Necropsy,
     List<GDxText> DxText, List<GDiagnosesFor> DiagnosesFor, List<GPathologyCase> PathologyCases, List<GSignOutCharges> SignOutCharges,
     List<GSummary> PathologySummaries);
 
@@ -79,7 +81,7 @@ internal static class GoldenData
     };
 
     public static AssayView Assay(GAssay a) =>
-        new(a.Id, a.Name, Kind(a.Kind), a.Plex, Enum.Parse<AssayStatus>(a.Status, true), a.SpeciesTags, a.FixTags);
+        new(a.Id, a.Name, Kind(a.Kind), a.Plex, Enum.Parse<AssayStatus>(a.Status, true), a.SpeciesTags, a.FixTags, a.Chromogen);
 
     public static SampleType Sample(string js) => Enum.Parse<SampleType>(js, true);
 

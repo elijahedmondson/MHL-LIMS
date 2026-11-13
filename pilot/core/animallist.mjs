@@ -1,5 +1,5 @@
 // Animal lists from investigators: a spreadsheet with one line per animal (ID, group, sex, strain, genotype, date of
-// birth, cage, treatment, priority, notes) that fills in a new request's PHL numbers. Pure, shared by the browser
+// birth, cage, treatment, priority, notes) that fills in a new request's MHL numbers. Pure, shared by the browser
 // (reading the file and showing what will happen) and the core (which checks the animals again when the request is
 // created). Also lays out the template investigators fill in.
 //
@@ -175,7 +175,7 @@ export function normalizeAnimal(raw, { phi = false, today, order = null, date190
 }
 
 // ---------- the whole list ----------
-// grid: the sheet's rows (strings). opts: species code, phi, groups (codes of an existing study), expected (PHL numbers
+// grid: the sheet's rows (strings). opts: species code, phi, groups (codes of an existing study), expected (MHL numbers
 // on the NAS request), today, necropsy (the request includes necropsy, where sex decides the organ list).
 // groups: the existing study's groups, as codes or { code, sex }. study: false when the request has no study (groups are
 // then only noted on each animal). date1904: from the workbook.
@@ -204,7 +204,7 @@ export function parseAnimalList(grid, { phi = false, groups = null, study = true
     Object.assign(a, animal, { problems: p, warnings: w });
   }
   if (!animals.length) problems.push('The sheet has a header row but no animals under it.');
-  if (animals.length > MAX_ANIMALS) problems.push(`A request can have at most ${MAX_ANIMALS} PHL numbers; the list has more than that.`);
+  if (animals.length > MAX_ANIMALS) problems.push(`A request can have at most ${MAX_ANIMALS} MHL numbers; the list has more than that.`);
   // The same ID twice.
   const seen = new Map();
   for (const a of animals) {
@@ -229,7 +229,7 @@ export function parseAnimalList(grid, { phi = false, groups = null, study = true
   }
   if (!study && animals.some((a) => a.groupCode)) warnings.push('There is no study, so the groups are only noted on each animal. Choose New study or Existing study to keep them as study groups.');
   const s = summarize(animals);
-  if (expected != null && animals.length && animals.length !== expected) warnings.push(`The NAS request is for ${expected} PHL number${expected === 1 ? '' : 's'}; the list has ${animals.length} animals, so the request will have ${animals.length}.`);
+  if (expected != null && animals.length && animals.length !== expected) warnings.push(`The NAS request is for ${expected} MHL number${expected === 1 ? '' : 's'}; the list has ${animals.length} animals, so the request will have ${animals.length}.`);
   if (phi && animals.some((a) => a.notes)) warnings.push('Human-derived material: check that the notes hold no names, record numbers or dates.');
   if (necropsy && s.noSex) warnings.push(`${s.noSex} animal${s.noSex === 1 ? ' has' : 's have'} no sex given, so ${s.noSex === 1 ? 'its' : 'their'} necropsy organ list will not be sex-specific.`);
   for (const g of s.groups) if (g.treatments.length > 1) warnings.push(`Group ${g.code} lists ${g.treatments.length} treatments (${g.treatments.join('; ')}); the study keeps the first, and each animal's own treatment goes in its notes.`);
@@ -303,7 +303,7 @@ export function templateSheets({ investigator = '', nasNumber = '', study = '', 
     name: 'Instructions',
     rows: [
       [{ v: 'How to fill in the animal list', style: 'title' }],
-      [{ v: 'Fill in the Animals sheet, one line per animal, and send it back with the NAS request number. MHL reads it into the LIMS: each line becomes a PHL number, in the order of the lines.', style: 'note' }],
+      [{ v: 'Fill in the Animals sheet, one line per animal, and send it back with the NAS request number. MHL reads it into the LIMS: each line becomes an MHL number, in the order of the lines.', style: 'note' }],
       [],
       [{ v: 'Column', style: 'header' }, { v: 'What to enter', style: 'header' }, { v: 'Example', style: 'header' }],
       ...cols.map((c) => [{ v: c.title, style: 'bold' }, c.help, c.example]),
