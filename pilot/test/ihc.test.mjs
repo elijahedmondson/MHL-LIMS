@@ -213,9 +213,9 @@ test('data saved before the IHC module gets the catalog on start-up', () => {
   const core = createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T09:00:00` }, save: () => { saved++; } });
   assert.equal(old.assays.length, ihcCatalog.assays.length);
   assert.deepEqual(old.ihcRequests, []);
-  assert.equal(old.version, 8);   // every later upgrade runs too
+  assert.equal(old.version, 9);   // every later upgrade runs too
   assert.deepEqual(old.pathology, {});
-  assert.equal(saved, 6);   // the catalog, the pathology module, and the version-5, 6, 7 and 8 stamps
+  assert.equal(saved, 7);   // the catalog, the pathology module, and the version-5, 6, 7, 8 and 9 stamps
   assert.equal(core.handle('GET', '/api/meta').json.ihc.catalog.entries, ihcCatalog.assays.length);
 });
 

@@ -19,17 +19,17 @@ const lims = path.resolve(here, '..');
 // In dependency order is not required (modules load on first use), but the app module must come last.
 const FILES = [
   path.join(lims, 'tools', 'rules-reference', 'rules.mjs'),
-  ...['stats', 'defs', 'ihc', 'pathology', 'necrules', 'terminology', 'protocols', 'bloodwork', 'sheets', 'dilution', 'wsi', 'estimates', 'estimatemail', 'xenium', 'animallist', 'xlsxwrite', 'core', 'seed'].map((m) => path.join(here, 'core', `${m}.mjs`)),
+  ...['stats', 'defs', 'ihc', 'pathology', 'necrules', 'terminology', 'protocols', 'bloodwork', 'sheets', 'dilution', 'wsi', 'estimates', 'estimatemail', 'xenium', 'animallist', 'xlsxwrite', 'outside', 'core', 'seed'].map((m) => path.join(here, 'core', `${m}.mjs`)),
   path.join(here, 'web', 'ui.js'),
   ...['lookup', 'request', 'intake', 'necropsy', 'studies', 'billing', 'labels', 'settings', 'assays', 'ihcviews', 'pathviews', 'reports',
-    'protocolviews', 'terms', 'bloodviews', 'calculator', 'wsiviews', 'tracking', 'estimateviews', 'xeniumviews', 'charts', 'studyreports'].map((m) => path.join(here, 'web', 'views', `${m}.js`)),
+    'protocolviews', 'terms', 'bloodviews', 'calculator', 'wsiviews', 'tracking', 'estimateviews', 'xeniumviews', 'charts', 'studyreports', 'outsideviews'].map((m) => path.join(here, 'web', 'views', `${m}.js`)),
   path.join(here, 'web', 'app.js'),
 ];
 
 // What the browser's /lib/... paths point to (the same table as server.mjs).
 export const LIB = {
   'rules.mjs': path.join(lims, 'tools', 'rules-reference', 'rules.mjs'),
-  ...Object.fromEntries(['stats', 'defs', 'ihc', 'pathology', 'terminology', 'protocols', 'bloodwork', 'sheets', 'dilution', 'wsi', 'estimates', 'estimatemail', 'xenium', 'animallist', 'xlsxwrite'].map((m) => [`${m}.mjs`, path.join(here, 'core', `${m}.mjs`)])),
+  ...Object.fromEntries(['stats', 'defs', 'ihc', 'pathology', 'terminology', 'protocols', 'bloodwork', 'sheets', 'dilution', 'wsi', 'estimates', 'estimatemail', 'xenium', 'animallist', 'xlsxwrite', 'outside'].map((m) => [`${m}.mjs`, path.join(here, 'core', `${m}.mjs`)])),
 };
 
 const nameOf = (spec) => path.basename(spec).replace(/\.(m?js)$/, '');
@@ -109,7 +109,12 @@ const IHC_CATALOG = ${JSON.stringify(ihcCatalog)};
   try { storage = window.localStorage; stored = storage.getItem(KEY); } catch (e) { storage = null; }
   const fresh = () => seedState({ priceList: PRICE_LIST, ihcCatalog: IHC_CATALOG, today: clock.today() });
   const state = stored ? JSON.parse(stored) : fresh();
-  const save = (s) => { try { if (storage) storage.setItem(KEY, JSON.stringify(s)); } catch (e) { console.warn('Could not save pilot data', e); } };
+  let warned = false;
+  // If the browser's storage is full, say so once: otherwise every later change would be lost on reload without a word.
+  const save = (s) => { try { if (storage) storage.setItem(KEY, JSON.stringify(s)); } catch (e) {
+    console.warn('Could not save pilot data', e);
+    if (!warned) { warned = true; setTimeout(() => { try { __require('ui').toast('This browser could not save the pilot data (its storage is full). Changes will be lost when the page is closed. In Settings, download a backup, then remove imported outside data or reset the pilot.', 'error'); } catch (x) { alert('This browser could not save the pilot data (its storage is full).'); } }, 0); }
+  } };
   if (!stored) save(state);
   window.MHL_LOCAL = createCore({ state, priceList: PRICE_LIST, ihcCatalog: IHC_CATALOG, clock, save, reseed: fresh });
   __require('app');

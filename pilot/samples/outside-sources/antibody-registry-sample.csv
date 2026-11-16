@@ -1,0 +1,49 @@
+ab_id,proper_citation,ab_name,ab_target,clone_id,vendor,catalog_num
+9990101,"(Abcam Cat# ab101500, RRID:AB_9990101)",Anti-CD8 antibody (sample record),CD8,SAMPLE-1,Abcam,ab101500
+9990102,"(Cell Signaling Technology Cat# 9027S, RRID:AB_9990102)",Ki-67 rabbit mAb (sample record),Ki-67,SAMPLE-2,Cell Signaling Technology,9027S
+9990103,"(Thermo Fisher Scientific Cat# 14-0195-82, RRID:AB_9990103)",CD8a monoclonal antibody (sample record),CD8a,SAMPLE-3,Thermo Fisher Scientific,14-0195-82
+9990104,"(BD Biosciences Cat# 553086, RRID:AB_9990104)",Biotin rat anti-mouse CD45R/B220 (sample record),CD45R,SAMPLE-4,BD Biosciences,553086
+9990105,"(Abcam Cat# ab28364, RRID:AB_9990105)",Anti-CD31 antibody (sample record),CD31,,Abcam,ab28364
+9990106,"(Other Vendor Cat# 9027, RRID:AB_9990106)",Unrelated antibody with the same number,XYZ,,Other Vendor Inc,9027
+,"(Abcam Cat# ab5694, RRID:AB_9990107)","Anti-alpha smooth muscle Actin antibody, ""sample"",
+second line",ACTA2,,Abcam,ab5694
+9990200,"(Sample Co Cat# SMP-1000, RRID:AB_9990200)",Unrelated sample antibody 0,TARGET,,Sample Co,SMP-1000
+9990201,"(Sample Co Cat# SMP-1001, RRID:AB_9990201)",Unrelated sample antibody 1,TARGET,,Sample Co,SMP-1001
+9990202,"(Sample Co Cat# SMP-1002, RRID:AB_9990202)",Unrelated sample antibody 2,TARGET,,Sample Co,SMP-1002
+9990203,"(Sample Co Cat# SMP-1003, RRID:AB_9990203)",Unrelated sample antibody 3,TARGET,,Sample Co,SMP-1003
+9990204,"(Sample Co Cat# SMP-1004, RRID:AB_9990204)",Unrelated sample antibody 4,TARGET,,Sample Co,SMP-1004
+9990205,"(Sample Co Cat# SMP-1005, RRID:AB_9990205)",Unrelated sample antibody 5,TARGET,,Sample Co,SMP-1005
+9990206,"(Sample Co Cat# SMP-1006, RRID:AB_9990206)",Unrelated sample antibody 6,TARGET,,Sample Co,SMP-1006
+9990207,"(Sample Co Cat# SMP-1007, RRID:AB_9990207)",Unrelated sample antibody 7,TARGET,,Sample Co,SMP-1007
+9990208,"(Sample Co Cat# SMP-1008, RRID:AB_9990208)",Unrelated sample antibody 8,TARGET,,Sample Co,SMP-1008
+9990209,"(Sample Co Cat# SMP-1009, RRID:AB_9990209)",Unrelated sample antibody 9,TARGET,,Sample Co,SMP-1009
+9990210,"(Sample Co Cat# SMP-1010, RRID:AB_9990210)",Unrelated sample antibody 10,TARGET,,Sample Co,SMP-1010
+9990211,"(Sample Co Cat# SMP-1011, RRID:AB_9990211)",Unrelated sample antibody 11,TARGET,,Sample Co,SMP-1011
+9990212,"(Sample Co Cat# SMP-1012, RRID:AB_9990212)",Unrelated sample antibody 12,TARGET,,Sample Co,SMP-1012
+9990213,"(Sample Co Cat# SMP-1013, RRID:AB_9990213)",Unrelated sample antibody 13,TARGET,,Sample Co,SMP-1013
+9990214,"(Sample Co Cat# SMP-1014, RRID:AB_9990214)",Unrelated sample antibody 14,TARGET,,Sample Co,SMP-1014
+9990215,"(Sample Co Cat# SMP-1015, RRID:AB_9990215)",Unrelated sample antibody 15,TARGET,,Sample Co,SMP-1015
+9990216,"(Sample Co Cat# SMP-1016, RRID:AB_9990216)",Unrelated sample antibody 16,TARGET,,Sample Co,SMP-1016
+9990217,"(Sample Co Cat# SMP-1017, RRID:AB_9990217)",Unrelated sample antibody 17,TARGET,,Sample Co,SMP-1017
+9990218,"(Sample Co Cat# SMP-1018, RRID:AB_9990218)",Unrelated sample antibody 18,TARGET,,Sample Co,SMP-1018
+9990219,"(Sample Co Cat# SMP-1019, RRID:AB_9990219)",Unrelated sample antibody 19,TARGET,,Sample Co,SMP-1019
+9990220,"(Sample Co Cat# SMP-1020, RRID:AB_9990220)",Unrelated sample antibody 20,TARGET,,Sample Co,SMP-1020
+9990221,"(Sample Co Cat# SMP-1021, RRID:AB_9990221)",Unrelated sample antibody 21,TARGET,,Sample Co,SMP-1021
+9990222,"(Sample Co Cat# SMP-1022, RRID:AB_9990222)",Unrelated sample antibody 22,TARGET,,Sample Co,SMP-1022
+9990223,"(Sample Co Cat# SMP-1023, RRID:AB_9990223)",Unrelated sample antibody 23,TARGET,,Sample Co,SMP-1023
+9990224,"(Sample Co Cat# SMP-1024, RRID:AB_9990224)",Unrelated sample antibody 24,TARGET,,Sample Co,SMP-1024
+9990225,"(Sample Co Cat# SMP-1025, RRID:AB_9990225)",Unrelated sample antibody 25,TARGET,,Sample Co,SMP-1025
+9990226,"(Sample Co Cat# SMP-1026, RRID:AB_9990226)",Unrelated sample antibody 26,TARGET,,Sample Co,SMP-1026
+9990227,"(Sample Co Cat# SMP-1027, RRID:AB_9990227)",Unrelated sample antibody 27,TARGET,,Sample Co,SMP-1027
+9990228,"(Sample Co Cat# SMP-1028, RRID:AB_9990228)",Unrelated sample antibody 28,TARGET,,Sample Co,SMP-1028
+9990229,"(Sample Co Cat# SMP-1029, RRID:AB_9990229)",Unrelated sample antibody 29,TARGET,,Sample Co,SMP-1029
+9990230,"(Sample Co Cat# SMP-1030, RRID:AB_9990230)",Unrelated sample antibody 30,TARGET,,Sample Co,SMP-1030
+9990231,"(Sample Co Cat# SMP-1031, RRID:AB_9990231)",Unrelated sample antibody 31,TARGET,,Sample Co,SMP-1031
+9990232,"(Sample Co Cat# SMP-1032, RRID:AB_9990232)",Unrelated sample antibody 32,TARGET,,Sample Co,SMP-1032
+9990233,"(Sample Co Cat# SMP-1033, RRID:AB_9990233)",Unrelated sample antibody 33,TARGET,,Sample Co,SMP-1033
+9990234,"(Sample Co Cat# SMP-1034, RRID:AB_9990234)",Unrelated sample antibody 34,TARGET,,Sample Co,SMP-1034
+9990235,"(Sample Co Cat# SMP-1035, RRID:AB_9990235)",Unrelated sample antibody 35,TARGET,,Sample Co,SMP-1035
+9990236,"(Sample Co Cat# SMP-1036, RRID:AB_9990236)",Unrelated sample antibody 36,TARGET,,Sample Co,SMP-1036
+9990237,"(Sample Co Cat# SMP-1037, RRID:AB_9990237)",Unrelated sample antibody 37,TARGET,,Sample Co,SMP-1037
+9990238,"(Sample Co Cat# SMP-1038, RRID:AB_9990238)",Unrelated sample antibody 38,TARGET,,Sample Co,SMP-1038
+9990239,"(Sample Co Cat# SMP-1039, RRID:AB_9990239)",Unrelated sample antibody 39,TARGET,,Sample Co,SMP-1039

@@ -110,3 +110,14 @@ The pilot's tracking sheet follows PHL.exe's print (`d_cmp001`, made of `d_req_p
 | 58 | When the list arrives after the request has been created, should it update the existing PHL numbers (labels, sex, groups) rather than only filling in a new request? Who may change an animal's details once necropsy has started? | Lists rarely arrive before the request | Phase 2 |
 | 59 | For human samples and organoid lines the pilot keeps no date of birth, keeps ages over 89 as "90 or older", and warns that notes must hold no identifiers. Is that what the NIH privacy office and the IRB expect, and should PDX models be treated the same? | Identifiable information in the LIMS | Phase 1 |
 
+
+## Outside IHC sources (added to the pilot November 2026)
+
+What each source allows, and what the pilot does with it, is in `docs/outside-ihc-sources.md`.
+
+| # | Question | Why it matters | Needed by |
+|---|---|---|---|
+| 60 | Does the IHC team want a target gene and RRID recorded for every antibody in use, and who does the first pass through the roughly 700 single-antibody protocols (the pilot suggests about 570 gene symbols before any import, and RRIDs once the registry list is imported, but a person must check each)? Should RRIDs appear on investigators' deliverables, ready for a methods section? | Who fills in the identifiers, and whether investigators see them | Phase 4 |
+| 61 | Import the real files once: the HPA's `proteinatlas.tsv.zip` and `normal_tissue.tsv.zip` (version 26.0) and the Antibody Registry download (needs a free account). Does the pilot find every column, and do the Antibody Registry's terms allow keeping the rows that match the catalog (only four fields of its download are stated to be CC0)? | The readers were written from the sources' documentation, not from the real files | Phase 4 |
+| 62 | Does the NIH Library or NCI have an institutional subscription to ImmunoQuery (or ExpertPath) or a CiteAb data licence, and would MHL pay for one? Should MHL ask Atlas Antibodies for permission to keep Antibodypedia validation summaries, and does MHL want to enrol in NordiQC's quality assessment for its human tissue IHC? | Today these four are links only, by their terms | Phase 4 |
+| 63 | In production, may the LIMS server reach proteinatlas.org and antibodyregistry.org (and scicrunch.org, with an API key) through the NIH firewall, and who owns refreshing the data after each HPA release? | The scheduled refresh replaces importing files by hand | Phase 4 |

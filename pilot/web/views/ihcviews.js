@@ -6,7 +6,7 @@ import { $, $$, api, esc, money, fmtDate, fmtDateTime, getMeta, sectionName, act
 export function ihcTabs(current, meta) {
   const t = [['requests', '#/molecular', `IHC requests${meta.ihc.unassigned ? ` <span class="count" title="Not assigned yet">${meta.ihc.unassigned}</span>` : ''}`],
     ['xenium', '#/molecular/xenium', `Xenium${meta.ihc.xeniumQueue ? ` <span class="count" title="MHL numbers waiting for a run">${meta.ihc.xeniumQueue}</span>` : ''}`],
-    ['catalog', '#/molecular/assays', 'Assay catalog'], ['calculator', '#/molecular/calculator', 'Antibody dilution calculator']];
+    ['catalog', '#/molecular/assays', 'Assay catalog'], ['outside', '#/molecular/outside', 'Outside sources'], ['calculator', '#/molecular/calculator', 'Antibody dilution calculator']];
   return `<h1>Molecular</h1><nav class="subtabs" aria-label="Molecular sections">${t.map(([k, href, label]) => `<a href="${href}" ${k === current ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
 export const molecularTabs = ihcTabs;

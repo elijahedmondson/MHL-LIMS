@@ -12,6 +12,7 @@ import { renderIhcHome, renderIhcRequest, renderIhcReview } from './views/ihcvie
 import { renderXenium, renderXeniumRun } from './views/xeniumviews.js';
 import { renderStudyReport } from './views/studyreports.js';
 import { renderAssays, renderAssay, renderAssayEdit } from './views/assays.js';
+import { renderOutside } from './views/outsideviews.js';
 import { renderCalculator } from './views/calculator.js';
 import { renderWsi, renderWsiImage } from './views/wsiviews.js';
 import { renderTracking } from './views/tracking.js';
@@ -66,6 +67,7 @@ async function route() {
       if (parts[1] === 'calculator') return await renderCalculator(app, params);
       if (parts[1] === 'new') { location.replace('#/new'); return undefined; }   // new requests are made under New request
       if (parts[1] === 'assays') return await renderAssays(app, params);
+      if (parts[1] === 'outside') return await renderOutside(app);
       if (parts[1] === 'assay' && parts[2] === 'new') return await renderAssayEdit(app, null);
       if (parts[1] === 'assay' && parts[3] === 'edit') return await renderAssayEdit(app, Number(parts[2]));
       if (parts[1] === 'assay') return await renderAssay(app, Number(parts[2]));

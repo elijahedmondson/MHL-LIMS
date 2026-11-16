@@ -1198,7 +1198,7 @@ const CATALOG_COLUMNS = [
   ['#', 'id', 7], ['Antibody', 'name', 28], ['Antibody clone', 'cloneShown', 14], ['Antibody host', 'hostShown', 13], ['Clonality', 'clonalityShown', 13],
   ['Kind', 'kindLabel', 16], ['Platform', 'platform', 12], ['Chromogen', 'chromogen', 12], ['Dilution and time', 'dilution', 22], ['Antigen retrieval', 'retrieval', 30],
   ['Proteolytic digestion', 'digestion', 18], ['Secondary antibody / detection kit', 'kit', 40], ['Fixative', 'fixative', 16], ['Species', 'species', 18],
-  ['Control tissue', 'control', 24], ['Manufacturer', 'manufacturer', 20], ['Catalog number', 'catalog', 20], ['Public', 'publicText', 10], ['Preferred', 'preferredText', 10],
+  ['Control tissue', 'control', 24], ['Manufacturer', 'manufacturer', 20], ['Catalog number', 'catalog', 20], ['Target gene', 'target', 12], ['RRID', 'rrid', 14], ['Public', 'publicText', 10], ['Preferred', 'preferredText', 10],
   ['Result', 'resultLabel', 15], ['Status', 'status', 10], ['Needs checking', 'checkText', 14], ['Notes', 'notes', 40], ['Last changed', 'changed', 12], ['Export line', 'sourceLine', 10],
 ];
 function catalogSheets(assays, { filtered = false, today = '', source = '' } = {}) {
@@ -1215,6 +1215,7 @@ function catalogSheets(assays, { filtered = false, today = '', source = '' } = {
       [{ v: 'Column', style: 'header' }, { v: 'Meaning', style: 'header' }],
       ['Antibody clone, host, clonality', 'As entered on the assay; where nobody has entered them, as read from the antibody name and catalog number. N/A = not applicable.'],
       ['Kind, platform, chromogen', 'Worked out from the detection kit and dilution unless set by hand on the assay.'],
+      ['Target gene, RRID', 'The target\'s gene symbol and the antibody\'s RRID (Antibody Registry), as entered or accepted on the assay page. N/A = not applicable.'],
       ['Public', 'Public: investigators can request it. Not public: MHL staff only.'],
       ['Preferred', 'The protocol to use first when there are several for the same target.'],
       ['Result', 'Works, Being optimized, Did not work, or not recorded.'],
@@ -3851,6 +3852,639 @@ const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 return { cellRef, zipStored, writeXlsx, XLSX_TYPE };
 });
 
+__define('outside', function () {
+// Outside IHC sources: what the Human Protein Atlas, the Antibody Registry (RRIDs), Antibodypedia, CiteAb, NordiQC and
+// ImmunoQuery can add to an assay in MHL's own catalog, and the readers for the two that publish open data files.
+//
+// What each source allows decides what the LIMS keeps (checked November 2026; see docs/outside-ihc-sources.md):
+//   - Human Protein Atlas: CC BY 4.0. Its download files may be imported, with the version and licence shown wherever
+//     the data appear. Human tissue only.
+//   - Antibody Registry: RRIDs are CC0. The registry's download (after signing in) may be imported to find the RRID of
+//     each catalog antibody.
+//   - Antibodypedia and CiteAb: their terms forbid copying their content into a database (CiteAb also forbids scraping).
+//     The LIMS only links to them; staff may save the page they found and a short note in their own words.
+//   - NordiQC: free to read, copyrighted, no data files. Links and staff notes.
+//   - ImmunoQuery: an Elsevier subscription. Links only.
+// MHL's own catalog stays the record of how an assay is run; outside data is shown beside it, never merged into it.
+//
+// Shared by the pilot core and the browser (/lib/outside.mjs). Uses only what browsers and Node 18+ both have.
+
+const SOURCES = [
+  { key: 'hpa', name: 'Human Protein Atlas', short: 'HPA', home: 'https://www.proteinatlas.org/', domains: ['proteinatlas.org'], use: 'import',
+    access: 'Free. Open data (CC BY 4.0): its download files can be imported here.',
+    what: 'Where each human protein is found by IHC in normal and cancer tissue, how reliable that staining is, and the HPA antibodies used.',
+    caution: 'Human tissue. For a mouse assay it shows where the human protein is found, which is a guide to control tissue, not proof the mouse antibody works.' },
+  { key: 'registry', name: 'Antibody Registry (RRID)', short: 'RRID', home: 'https://www.antibodyregistry.org/', domains: ['antibodyregistry.org', 'scicrunch.org', 'rrid.site'], use: 'import',
+    access: 'Free. RRIDs are open (CC0); the registry download (after signing in) can be imported here.',
+    what: 'The RRID that identifies the exact antibody product, for methods sections, grant reports and NIH rigor requirements.' },
+  { key: 'antibodypedia', name: 'Antibodypedia', short: 'Antibodypedia', home: 'https://www.antibodypedia.com/', domains: ['antibodypedia.com'], use: 'link',
+    access: 'Free to read. Its terms forbid copying its content into a database, so the LIMS links to it.',
+    what: 'Antibodies against each human target from more than 100 providers, with validation scores by application, including IHC.' },
+  { key: 'citeab', name: 'CiteAb', short: 'CiteAb', home: 'https://www.citeab.com/antibodies/search', domains: ['citeab.com'], use: 'link',
+    access: 'Free search. Its terms forbid scraping; its data come only under a paid licence, so the LIMS links to it.',
+    what: 'Antibodies ranked by how often papers cite them, with application and species filters; the most useful of the six for mouse antibodies.' },
+  { key: 'nordiqc', name: 'NordiQC', short: 'NordiQC', home: 'https://www.nordiqc.org/epitope.php', domains: ['nordiqc.org'], use: 'link',
+    access: 'Free to read. No data files, so the LIMS links to it.',
+    what: 'Quality assessment of clinical IHC by epitope: which clones and protocols stained optimally, with recommended protocols for each stainer.',
+    caution: 'Human diagnostic tissue.' },
+  { key: 'immunoquery', name: 'ImmunoQuery', short: 'ImmunoQuery', home: 'https://app.immunoquery.com/', domains: ['immunoquery.com'], use: 'link',
+    access: 'Elsevier subscription; sign in. Links only.',
+    what: 'Antibody panels for human tumor diagnosis, with the percent of cases positive from the literature.', caution: 'Human diagnostic pathology.' },
+];
+const OTHER_SOURCE = { key: 'other', name: 'Other (datasheet, paper)', domains: null };
+const sourceByKey = (k) => SOURCES.find((s) => s.key === k) || (k === 'other' ? OTHER_SOURCE : null);
+const HPA_LICENCE = 'CC BY 4.0';
+
+// "N/A" means "does not apply" (a tag such as GFP has no gene; a kit may have no RRID): nothing is suggested.
+const NOT_APPLICABLE = /^(n\/?a|none|not applicable|-+|—)$/i;
+const isNA = (v) => NOT_APPLICABLE.test(String(v || '').trim());
+
+// ---------- identifiers ----------
+
+// An antibody RRID: "AB_2722", "RRID:AB_2722", or a registry or resolver address that ends in one.
+function readRrid(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { value: '' };
+  if (isNA(s)) return { value: 'N/A' };
+  const plain = s.match(/^(?:RRID\s*:\s*)?AB_(\d{1,10})$/i);
+  if (plain) return { value: `AB_${plain[1]}` };
+  if (/^https?:\/\//i.test(s) && hostAllowed(s, sourceByKey('registry').domains)) {
+    const m = s.match(/(?:RRID:)?AB_(\d{1,10})\/?(?:[?#].*)?$/i);
+    if (m) return { value: `AB_${m[1]}` };
+  }
+  if (/^(?:RRID\s*:\s*)?(CVCL|SCR|IMSR|MGI|Addgene|ZFIN|BDSC)_?/i.test(s)) return { value: '', error: `${s} is not an antibody RRID; antibody RRIDs start with AB_.` };
+  return { value: '', error: 'An antibody RRID looks like AB_2722 (or RRID:AB_2722).' };
+}
+
+// UniProt accessions (UniProt's own pattern), up to three: "P46013" or "P46013, Q61263".
+const UNIPROT = /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-\d+)?$/;
+function readUniprot(raw) {
+  const parts = String(raw ?? '').toUpperCase().split(/[\s,;]+/).filter(Boolean);
+  if (!parts.length) return { value: '' };
+  const bad = parts.filter((p) => !UNIPROT.test(p));
+  if (bad.length) return { value: '', error: `${bad.join(', ')} ${bad.length === 1 ? 'is not a UniProt accession' : 'are not UniProt accessions'} (such as P46013).` };
+  if (parts.length > 3) return { value: '', error: 'Give at most three UniProt accessions (the human and the mouse protein, say).' };
+  return { value: [...new Set(parts)].join(', ') };
+}
+
+// The target's gene symbol, as HGNC writes it for human (MKI67) or MGI for mouse (Mki67); outside sources are searched
+// with the human form. "N/A" for a tag or reagent (GFP, BrdU, TUNEL).
+function readGene(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { value: '' };
+  if (isNA(s)) return { value: 'N/A' };
+  if (!/^[A-Za-z0-9][A-Za-z0-9\-.@]{0,19}$/.test(s)) return { value: '', error: 'A gene symbol is one word of letters, numbers and hyphens, such as MKI67, PTPRC or CD8A. Type N/A for a tag or reagent.' };
+  return { value: s };
+}
+const geneKey = (g) => String(g || '').trim().toUpperCase();
+const hasGene = (a) => !!a.target && !isNA(a.target);
+const hasRrid = (a) => /^AB_\d+$/.test(a.rrid || '');
+
+// Only plain http and https addresses on the source's own site are saved, so a saved link cannot run script.
+function hostAllowed(url, domains) {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  if (!domains) return true;
+  const host = u.hostname.toLowerCase();
+  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+// A page someone found on an outside source, with a short note in their own words (a summary, not a copy).
+function readReference(body) {
+  const src = sourceByKey(String(body?.source || ''));
+  if (!src) return { error: 'Choose which source the page is from.' };
+  const url = String(body?.url ?? '').trim();
+  const note = String(body?.note ?? '').trim().replace(/\s+/g, ' ');
+  if (!url && !note) return { error: 'Give the address of the page, a note, or both.' };
+  if (url) {
+    if (url.length > 500) return { error: 'That address is too long (500 characters at most).' };
+    if (!hostAllowed(url, null)) return { error: 'Give a web address starting with https:// (or http://).' };
+    if (src.domains && !hostAllowed(url, src.domains)) return { error: `That address is not on ${src.name} (${src.domains.join(', ')}). Choose "Other" for a datasheet or paper.` };
+  }
+  if (note.length > 400) return { error: 'Keep the note to 400 characters: a summary in your own words, not a copy of the page.' };
+  return { value: { source: src.key, url, note } };
+}
+
+// ---------- matching catalog numbers and vendors ----------
+
+// A catalog number as the registry would write it: brackets ("(rabb mAb)") and "Cat#" removed, upper case. Entries
+// with several antibodies ("ab133616, ab101500") have no single catalog number.
+function catalogRaw(raw) {
+  // "(rabb mAb0" (a bracket never closed) is dropped with the rest of the line; "N/A (ms)" is no catalog number.
+  let s = String(raw ?? '').replace(/\([^()]*\)/g, ' ').replace(/\(.*$/, ' ');
+  if (/[,;]/.test(s) || NOT_APPLICABLE.test(s.trim())) return '';
+  s = s.replace(/\b(?:cat(?:alog)?\.?\s*(?:no\.?|number|#)?|clone\s+\S+)\s*:?/gi, ' ');
+  return s.toUpperCase().replace(/[^A-Z0-9-]+/g, '').replace(/^-+|-+$/g, '');
+}
+const catalogKey = (raw) => catalogRaw(raw).replace(/-/g, '');
+// A bare number such as "9027" is shared by many vendors' catalogs; it only matches with the vendor.
+const distinctive = (key) => (/[A-Z]/.test(key) && key.length >= 5) || key.length >= 7;
+
+const VENDORS = [
+  ['cell signaling', /cell signal|\bcst\b/], ['abcam', /abcam/], ['bd', /\bbd\b|becton|pharmingen/],
+  ['thermo', /thermo|invitrogen|ebioscience|life tech|molecular probes|pierce|lab ?vision|neomarkers/], ['santa cruz', /santa cruz/],
+  ['novus', /novus/], ['r&d', /r\s?&\s?d|r and d|bio-?techne/], ['proteintech', /proteintech/], ['leica', /leica|novocastra/], ['agilent', /dako|agilent/],
+  ['biolegend', /biolegend/], ['millipore', /millipore|sigma|merck|chemicon|upstate|calbiochem|oncogene research/], ['biocare', /biocare/], ['vector', /vector lab/],
+  ['genetex', /genetex/], ['bio-rad', /bio-?rad|serotec/], ['roche', /ventana|roche/], ['atlas', /atlas antibodies|prestige/], ['synaptic systems', /synaptic systems|\bsysy\b/],
+  ['wako', /wako|fujifilm/], ['abnova', /abnova/], ['cell marque', /cell marque/], ['jackson', /jackson immuno/], ['bethyl', /bethyl/], ['enzo', /enzo/], ['antibodies-online', /antibodies-online/],
+];
+function vendorKey(raw) {
+  const s = String(raw ?? '').toLowerCase();
+  if (!s.trim()) return '';
+  return VENDORS.find(([, re]) => re.test(s))?.[0] || s.replace(/\b(inc|ltd|llc|gmbh|corp(oration)?|co|company|biosciences?|biologicals?|technolog(y|ies)|laboratories|labs?|antibodies)\b|[^a-z0-9]+/g, ' ').trim();
+}
+const vendorsMatch = (a, b) => { const x = vendorKey(a); const y = vendorKey(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)); };
+
+// HPA's own antibodies are sold under their HPA IDs (HPA002198, CAB000146, AMAb90569).
+const HPA_AB = /\b(HPA\d{6}|CAB\d{6}|AMAb\d{5})\b/i;
+const hpaAntibodyId = (catalog) => (String(catalog || '').match(HPA_AB)?.[1] || '').toUpperCase().replace(/^AMAB/, 'AMAb');
+
+// Panels and double stains hold several antibodies; their outside references belong on the single-stain protocols.
+const singleAntibody = (a) => !(a.plex > 1) && !a.components && !/\d-plex|^(duplex|triplex)\b/i.test(a.name || '') && !/[,;]/.test(String(a.catalog || '').replace(/\([^()]*\)/g, ''));
+
+// ---------- the target gene ----------
+
+const GREEK = { 'α': 'a', 'β': 'b', 'γ': 'g', 'δ': 'd', 'ε': 'e', 'κ': 'k', 'λ': 'l', 'μ': 'm' };
+const phrase = (s) => String(s || '').toLowerCase().replace(/[αβγδεκλμ]/g, (c) => GREEK[c]).replace(/\s+/g, ' ').trim();
+const nameKey = (s) => phrase(s).toUpperCase().replace(/\s+/g, '');
+const looseKey = (s) => nameKey(s).replace(/[-./_]/g, '');
+
+// Common IHC names whose gene symbol is not the name itself (human symbols). Checked against the HPA when it is loaded.
+const TARGET_ALIASES = {
+  'ki67': 'MKI67', 'ki-67': 'MKI67', 'mib-1': 'MKI67', 'f4/80': 'ADGRE1', 'cd31': 'PECAM1', 'pecam-1': 'PECAM1', 'cd31 pecam-1': 'PECAM1',
+  'cd45': 'PTPRC', 'cd45 (lca)': 'PTPRC', 'lca': 'PTPRC', 'b220': 'PTPRC', 'cd45r': 'PTPRC', 'cd45r/b220': 'PTPRC', 'cd45r/ b220': 'PTPRC', 'cd45ra': 'PTPRC', 'cd45ro': 'PTPRC',
+  'iba1': 'AIF1', 'iba-1': 'AIF1', 'sma': 'ACTA2', 'a-sma': 'ACTA2', 'actin, a-smooth muscle': 'ACTA2', 'alpha smooth muscle actin': 'ACTA2', 'smooth muscle actin': 'ACTA2',
+  'e-cadherin': 'CDH1', 'cadherin (e-cadherin)': 'CDH1', 'n-cadherin': 'CDH2', 'cadherin (n-cadherin)': 'CDH2', 'b-catenin': 'CTNNB1', 'catenin (b-catenin)': 'CTNNB1', 'beta-catenin': 'CTNNB1',
+  'cd3': 'CD3E', 'cd8': 'CD8A', 'cd8a': 'CD8A', 'cd20': 'MS4A1', 'cd117': 'KIT', 'ckit': 'KIT', 'c-kit': 'KIT', 'cd11b': 'ITGAM', 'cd11c': 'ITGAX', 'cd79a': 'CD79A',
+  'cd138': 'SDC1', 'cd10': 'MME', 'cd15': 'FUT4', 'cd15 (ssea1)': 'FUT4', 'cd56': 'NCAM1', 'cd56 (ncam1)': 'NCAM1', 'cd57': 'B3GAT1', 'cd206': 'MRC1', 'cd204': 'MSR1', 'cd133': 'PROM1',
+  'cd103': 'ITGAE', 'cd49a': 'ITGA1', 'cd49b': 'ITGA2', 'cd54': 'ICAM1', 'cd54 (icam1)': 'ICAM1', 'cd71': 'TFRC', 'cd71 (transferrin receptor)': 'TFRC', 'cd25': 'IL2RA', 'cd21': 'CR2',
+  'cd23': 'FCER2', 'cd166': 'ALCAM', 'cd276': 'CD276', 'b7-h3': 'CD276', 'b7-h3 (cd276)': 'CD276', 'b7h4': 'VTCN1', 'b7-h4': 'VTCN1', 'pd-l1': 'CD274', 'pdl1': 'CD274', 'pd-1': 'PDCD1', 'pd1': 'PDCD1',
+  'her2': 'ERBB2', 'c-erbb-2': 'ERBB2', 'p53': 'TP53', 'p27': 'CDKN1B', 'cdkn1b (p27)': 'CDKN1B', 'p21': 'CDKN1A', 'p16': 'CDKN2A', 'c-myc': 'MYC', 'c-fos': 'FOS', 'c-maf': 'MAF',
+  'androgen receptor': 'AR', 'estrogen receptor alpha': 'ESR1', 'progesterone receptor': 'PGR', 'cleaved caspase 3': 'CASP3', 'cleaved casp3': 'CASP3', 'caspase 3': 'CASP3', 'caspase-3': 'CASP3',
+  'caspase 8': 'CASP8', 'calretinin': 'CALB2', 'chromogranin': 'CHGA', 'chromogranin a': 'CHGA', 'synaptophysin': 'SYP', 'vimentin': 'VIM', 'desmin': 'DES', 'myeloperoxidase': 'MPO',
+  'lysozyme': 'LYZ', 'cea': 'CEACAM5', 'carcinoembryonic antigen (cea)': 'CEACAM5', 'cea/cd66e': 'CEACAM5', 'carbonic anhydrase ix': 'CA9', 'carbonic anhydrase ix (ca9)': 'CA9',
+  'carbonic anhydrase xii': 'CA12', 'ttf-1': 'NKX2-1', 'ttf1': 'NKX2-1', '53bp1': 'TP53BP1', 'ascl1 (mash1)': 'ASCL1', 'mash1': 'ASCL1', 'ascl2/mash2': 'ASCL2', 'bap-1': 'BAP1',
+  'bcl-2': 'BCL2', 'alkaline phosphatase (tissue non-specific)': 'ALPL', 'cathepsin g': 'CTSG', 'ccl2/mcp-1': 'CCL2', 'c/ebpbeta': 'CEBPB', 'c/ebpb': 'CEBPB', 'c/ebpdelta': 'CEBPD', 'c/ebpd': 'CEBPD',
+  'claudin 3': 'CLDN3', 'claudin 4': 'CLDN4', 'claudin 5': 'CLDN5', 'cd206 (a/mannose)': 'MRC1', 'alk (anaplastic lymphoma kinase)': 'ALK', 'cd103 (itgae)': 'ITGAE', 'gfap': 'GFAP',
+  'foxp3': 'FOXP3', 'cd68': 'CD68', 'cd4': 'CD4', 'cd163': 'CD163', 'cd34': 'CD34', 'cd19': 'CD19', 'cd1a': 'CD1A', 'cd1d': 'CD1D', 'cd44': 'CD44', 'cd38': 'CD38', 'cd40': 'CD40',
+  'cd69': 'CD69', 'cd74': 'CD74', 'cd86': 'CD86', 'cd24': 'CD24', 'cd27': 'CD27', 'cd6': 'CD6', 'cd200': 'CD200', 'tmem119': 'TMEM119', 'satb2': 'SATB2', 'numa1': 'NUMA1',
+  'cyclin d1': 'CCND1', 'cox-2': 'PTGS2', 'cox2': 'PTGS2', 'cytokeratin 5': 'KRT5', 'cytokeratin 7': 'KRT7', 'cytokeratin 8': 'KRT8', 'cytokeratin 14': 'KRT14', 'cytokeratin 18': 'KRT18',
+  'cytokeratin 19': 'KRT19', 'cytokeratin 20': 'KRT20', 'ck5': 'KRT5', 'ck7': 'KRT7', 'ck8': 'KRT8', 'ck14': 'KRT14', 'ck18': 'KRT18', 'ck19': 'KRT19', 'ck20': 'KRT20',
+  'epidermal growth factor receptor (egfr)': 'EGFR', 'epithelial membrane antigen (ema)': 'MUC1', 'ema': 'MUC1', 'era': 'ESR1', 'er-alpha': 'ESR1', 'er-beta': 'ESR2', 'erb': 'ESR2',
+  'exportin-1': 'XPO1', 'collagen iv': 'COL4A1', 'clusterin': 'CLU', 'decorin': 'DCN', 'calreticulin': 'CALR', 'apoe': 'APOE', 'akt2': 'AKT2', 'ephb2': 'EPHB2', 'epcam': 'EPCAM',
+  'complement component c3d': 'C3', 'corticotropin releasing factor (crf)': 'CRH', 'corticotropin releasing factor receptor 2 (crhr2)': 'CRHR2', 'bombesin receptor 3': 'BRS3',
+};
+const aliasOf = (p) => (Object.hasOwn(TARGET_ALIASES, p) ? TARGET_ALIASES[p] : '');
+// Tags, labels and reagents: no gene to look up.
+const NO_GENE = /^(e?gfp|[ert]fp|yfp|tdtomato|mcherry|2a peptide|brdu|edu|tunel|apoptag|apoptag \(tunel\)|ha( tag)?|flag( tag)?|v5( tag)?|myc tag|biotin|digoxigenin|dig|alexa fluor \d+|fitc|luciferase|b-gal|beta-gal|x-gal|lacz|5-hmc|5-mc|candida albicans|ca19-9)$/;
+
+// The phrases a catalog name could mean, in lower case: the whole name, the name without brackets, what is in brackets,
+// and each word (`whole` has all but the single words). Notes in brackets ("1st of double stain with CD45R", "method for bones", "a/Hu", "Clone 010") are left out.
+function namePhrases(name) {
+  const core = String(name || '').replace(/\((?:\d(?:st|nd|rd|th) of double[^)]*|[^)]*\bfor bones\b[^)]*|a\/\w+|clone [^)]*)\)/gi, ' ').replace(/\s+/g, ' ').trim();
+  const phrases = new Set([phrase(core)]);
+  const noParen = phrase(core.replace(/\([^)]*\)/g, ' '));
+  if (noParen) phrases.add(noParen);
+  for (const m of core.matchAll(/\(([^)]+)\)/g)) phrases.add(phrase(m[1]));
+  phrases.delete('');
+  const whole = new Set(phrases);
+  for (const p of whole) for (const part of p.split(/\s*\/\s*|\s+/)) if (part.length > 1) phrases.add(part);
+  return { core, phrases, whole };
+}
+
+// The symbol a catalog name probably means, best guess first. `genes` is the imported HPA summary (by upper-case symbol);
+// without it, words written like symbols are offered as "check". Never chosen automatically: staff accept them.
+function targetCandidates(a, genes = null, synonymIndex = null) {
+  if (!singleAntibody(a)) return [];
+  const { core, phrases, whole } = namePhrases(a.name);
+  // A tag or label (GFP, BrdU, ApopTag) is recognized from the whole name, not one word of it ("I-Ad, biotin" is an
+  // antibody to I-Ad that happens to be biotinylated).
+  const isTag = [...whole].some((p) => NO_GENE.test(p));
+  const out = []; const seen = new Set();
+  const add = (symbol, why, strength) => { const k = geneKey(symbol); if (!k || seen.has(k)) return; seen.add(k); out.push({ symbol, why, strength }); };
+  for (const p of phrases) {
+    const alias = aliasOf(p);
+    if (alias) add(alias, genes?.[alias] ? `“${p}” is ${alias} in the HPA` : `“${p}” is usually ${alias}`, genes?.[alias] ? 3 : 2);
+  }
+  if (genes) {
+    // A single word of a longer name ("Hop" in "Hop protein") is weaker evidence than the whole name, and a synonym
+    // shared by several genes is only a hint.
+    for (const p of phrases) { const g = genes[nameKey(p)]; if (g) add(g.gene, whole.has(p) ? `the name is the HPA gene symbol ${g.gene}` : `“${p}” is the HPA gene symbol ${g.gene}; check it`, whole.has(p) ? 3 : 1); }
+    const idx = synonymIndex || buildSynonymIndex(genes);
+    for (const p of phrases) {
+      const list = idx.exact.get(nameKey(p)) || [];
+      for (const sym of list) add(sym, list.length > 1 ? `“${p}” is a synonym of ${list.join(' and ')} in the HPA` : `“${p}” is a synonym of ${sym} in the HPA`, list.length === 1 && whole.has(p) ? 2 : 1);
+    }
+    for (const p of phrases) for (const sym of idx.loose.get(looseKey(p)) || []) add(sym, `“${p}” is close to ${sym} in the HPA`, 1);
+  } else if (!isTag) {
+    // Without the HPA: a word written in capitals and numbers (AASS, CDK4, AGR2) is probably the symbol itself.
+    // Mixed case with a number or two capitals (Akt2, ApoE, EpCAM) counts too. Words that are already aliases are not repeated.
+    for (const tok of core.replace(/\([^)]*\)/g, ' ').split(/[\s/,]+/)) {
+      if (aliasOf(phrase(tok)) || !/^[A-Za-z][A-Za-z0-9]{2,9}$/.test(tok)) continue;
+      if (/^[A-Z][A-Z0-9]+$/.test(tok) || /\d/.test(tok) || (tok.match(/[A-Z]/g) || []).length >= 2) add(tok.toUpperCase(), 'the name looks like a gene symbol; check it', 1);
+    }
+  }
+  // N/A never outranks a gene with good evidence.
+  if (isTag) add('N/A', 'a tag, label or reagent, not a gene', out.some((c) => c.strength >= 2) ? 1 : 3);
+  return out.sort((x, y) => y.strength - x.strength).slice(0, 4);
+}
+
+// Synonym lookups for the imported HPA genes: exact ("KI-67" -> MKI67) and ignoring hyphens and dots.
+// Built once per imported gene list (the list is replaced, never changed, on import).
+const synonymMemo = new WeakMap();
+function buildSynonymIndex(genes) {
+  if (genes && typeof genes === 'object' && synonymMemo.has(genes)) return synonymMemo.get(genes);
+  const exact = new Map(); const loose = new Map();
+  const put = (map, k, sym) => { if (!k) return; const list = map.get(k) || []; if (!list.includes(sym)) list.push(sym); map.set(k, list); };
+  for (const g of Object.values(genes || {})) {
+    put(loose, looseKey(g.gene), g.gene);
+    for (const s of g.synonyms || []) { put(exact, nameKey(s), g.gene); put(loose, looseKey(s), g.gene); }
+  }
+  const idx = { exact, loose };
+  if (genes && typeof genes === 'object') synonymMemo.set(genes, idx);
+  return idx;
+}
+
+// ---------- RRIDs ----------
+
+// The imported registry rows by catalog number, and by each shorter form of it ("14-0195-82" under "14-0195"), so each
+// assay is matched without reading every row.
+function registryIndex(rows = []) {
+  const byKey = new Map(); const byPrefix = new Map();
+  const put = (m, k, item) => { const l = m.get(k); if (l) l.push(item); else m.set(k, [item]); };
+  for (const r of rows) {
+    const rr = catalogRaw(r.catalog);
+    if (!rr) continue;
+    const item = { r, rr, rk: rr.replace(/-/g, '') };
+    put(byKey, item.rk, item);
+    for (let i = rr.lastIndexOf('-'); i > 0; i = rr.lastIndexOf('-', i - 1)) put(byPrefix, rr.slice(0, i), item);
+  }
+  return { byKey, byPrefix, size: rows.length };
+}
+
+// RRIDs that may belong to the assay's antibody, from the imported registry rows (or their index) and the HPA, best first.
+function rridCandidates(a, registry = [], genes = null) {
+  if (!singleAntibody(a) || a.rrid) return [];
+  const out = [];
+  const hpaId = hpaAntibodyId(a.catalog);
+  if (hpaId && genes) {
+    for (const g of Object.values(genes)) {
+      const ab = (g.antibodies || []).find((x) => x.id === hpaId && x.rrid);
+      if (ab) out.push({ rrid: ab.rrid, level: 'exact', why: `HPA antibody ${hpaId} (${g.gene})`, catalog: hpaId, vendor: 'Atlas Antibodies', name: `${g.gene} antibody ${hpaId}`, clone: '' });
+    }
+  }
+  const idx = Array.isArray(registry) ? registryIndex(registry) : registry;
+  const raw = catalogRaw(a.catalog); const key = raw.replace(/-/g, '');
+  if (key && idx?.byKey) {
+    const consider = (item, variant) => {
+      const vendorOk = vendorsMatch(a.manufacturer, item.r.vendor);
+      const level = !variant ? (vendorOk ? 'exact' : distinctive(key) ? 'catalog only' : null) : vendorOk ? 'variant' : null;
+      if (!level) return;
+      const r = item.r;
+      out.push({ rrid: r.rrid, level, why: level === 'exact' ? 'same catalog number and vendor' : level === 'catalog only' ? `same catalog number; the registry gives the vendor as ${r.vendor || 'unknown'}` : `catalog number ${r.catalog}, a size or format of ${raw}`,
+        catalog: r.catalog, vendor: r.vendor, name: r.name || '', clone: r.clone || '' });
+    };
+    for (const item of idx.byKey.get(key) || []) consider(item, false);
+    for (const item of idx.byPrefix.get(raw) || []) consider(item, true);
+    if (/\d$/.test(key)) for (let c = 65; c <= 90; c++) for (const item of idx.byKey.get(key + String.fromCharCode(c)) || []) consider(item, true);
+  }
+  const rank = { exact: 0, variant: 1, 'catalog only': 2 };
+  const seen = new Set();
+  return out.sort((x, y) => rank[x.level] - rank[y.level]).filter((c) => (seen.has(c.rrid) ? false : seen.add(c.rrid))).slice(0, 5);
+}
+
+// ---------- links ----------
+
+// For each source: the best page for this assay (an exact page when an identifier is known, otherwise a search), the
+// text to search for where the source has no search address, and the pages staff have saved.
+function sourceLinks(a, { hpaGene = null } = {}) {
+  const gene = hasGene(a) ? geneKey(a.target) : '';
+  const single = singleAntibody(a);
+  const cat = single ? catalogRaw(a.catalog) : '';
+  const hpaId = hpaAntibodyId(a.catalog);
+  const searchText = gene || String(a.name || '').replace(/\([^)]*\)/g, '').trim();
+  const saved = (k) => (a.refs || []).filter((r) => r.source === k && r.url);
+  const enc = encodeURIComponent;
+  return SOURCES.map((s) => {
+    const links = []; let search = '';
+    if (s.key === 'hpa') {
+      if (hpaGene?.ensembl) {
+        links.push({ label: `${hpaGene.gene} in the HPA`, url: `https://www.proteinatlas.org/${enc(hpaGene.ensembl)}-${enc(hpaGene.gene)}`, exact: true });
+        links.push({ label: 'HPA antibodies and validation', url: `https://www.proteinatlas.org/${enc(hpaGene.ensembl)}-${enc(hpaGene.gene)}/summary/antibody`, exact: true });
+      } else if (searchText) links.push({ label: `Search the HPA for ${searchText}`, url: `https://www.proteinatlas.org/search/${enc(searchText)}`, exact: false });
+      if (hpaId) links.push({ label: `HPA antibody ${hpaId}`, url: `https://www.proteinatlas.org/search/${enc(hpaId)}`, exact: true });
+    } else if (s.key === 'registry') {
+      if (hasRrid(a)) links.push({ label: `RRID:${a.rrid}`, url: `https://www.antibodyregistry.org/${enc(a.rrid)}`, exact: true });
+      else if (cat) links.push({ label: `Search for catalog number ${cat}`, url: `https://rrid.site/data/source/nif-0000-07730-1/search?q=${enc(cat)}`, exact: false });
+    } else if (s.key === 'antibodypedia') search = searchText;
+    else if (s.key === 'citeab') search = cat ? `${cat}${a.manufacturer ? ` ${a.manufacturer}` : ''}` : searchText;
+    else if (s.key === 'nordiqc') search = searchText;
+    if (!links.length || s.use === 'link') links.push({ label: s.key === 'immunoquery' ? 'Sign in to ImmunoQuery' : s.key === 'nordiqc' ? 'NordiQC epitope list' : `Open ${s.short}`, url: s.home, exact: false });
+    return { key: s.key, name: s.name, use: s.use, access: s.access, what: s.what, caution: s.caution || '', links, search, saved: saved(s.key) };
+  });
+}
+
+// ---------- reading files without holding them in memory ----------
+
+const SIG_ZIP = 0x04034b50;
+// Hands the text of a file to onChunk piece by piece: a plain file, a .gz, or the first .tsv/.csv/.txt inside a .zip
+// (the HPA publishes proteinatlas.tsv.zip). Only the parts read are held, so a file of hundreds of megabytes is fine.
+async function readTextChunks(file, onChunk, { entry = /\.(tsv|csv|txt)$/i } = {}) {
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  let stream; let name = file.name || '';
+  if (head.length === 4 && new DataView(head.buffer).getUint32(0, true) === SIG_ZIP) {
+    const e = await zipEntry(file, entry);
+    name = e.name;
+    const data = file.slice(e.start, e.start + e.size);
+    if (e.method === 8) { needDecompression(); stream = data.stream().pipeThrough(new DecompressionStream('deflate-raw')); }
+    else if (e.method === 0) stream = data.stream();
+    else throw new Error(`${e.name} is compressed in a way this browser cannot read (method ${e.method}); unzip it and choose the file inside.`);
+  } else if (head[0] === 0x1f && head[1] === 0x8b) { needDecompression(); stream = file.stream().pipeThrough(new DecompressionStream('gzip')); }
+  else stream = file.stream();
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  let chars = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chars += value.length;
+      if (onChunk(value) === false) { await reader.cancel(); break; }
+    }
+  } catch (e) {
+    await reader.cancel().catch(() => {});
+    throw e;
+  }
+  return { name, chars };
+}
+const needDecompression = () => { if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot open compressed files; unzip it and choose the file inside.'); };
+
+async function zipEntry(file, entry) {
+  const tailLen = Math.min(file.size, 65557 + 22);
+  const tail = new Uint8Array(await file.slice(file.size - tailLen).arrayBuffer());
+  const tv = new DataView(tail.buffer);
+  let eocd = -1;
+  for (let i = tail.length - 22; i >= 0; i--) if (tv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('This .zip file is damaged or incomplete.');
+  let count = tv.getUint16(eocd + 10, true); let cdSize = tv.getUint32(eocd + 12, true); let cdOffset = tv.getUint32(eocd + 16, true);
+  if (cdOffset === 0xffffffff || count === 0xffff) {   // ZIP64
+    const loc = eocd - 20;
+    if (loc < 0 || tv.getUint32(loc, true) !== 0x07064b50) throw new Error('This .zip file is damaged or incomplete.');
+    const recAt = Number(tv.getBigUint64(loc + 8, true));
+    const rec = new DataView(await file.slice(recAt, recAt + 56).arrayBuffer());
+    if (rec.getUint32(0, true) !== 0x06064b50) throw new Error('This .zip file is damaged or incomplete.');
+    count = Number(rec.getBigUint64(32, true)); cdSize = Number(rec.getBigUint64(40, true)); cdOffset = Number(rec.getBigUint64(48, true));
+  }
+  const cd = new Uint8Array(await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer());
+  const dv = new DataView(cd.buffer);
+  const names = []; const found = [];
+  for (let p = 0, k = 0; k < count && p + 46 <= cd.length; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true); let csize = dv.getUint32(p + 20, true); let usize = dv.getUint32(p + 24, true);
+    const nlen = dv.getUint16(p + 28, true); const xlen = dv.getUint16(p + 30, true); const clen = dv.getUint16(p + 32, true);
+    let local = dv.getUint32(p + 42, true);
+    const nm = new TextDecoder().decode(cd.subarray(p + 46, p + 46 + nlen));
+    // ZIP64 extra field: the 64-bit sizes and offset, in this order, for each 32-bit field that is 0xFFFFFFFF.
+    for (let x = p + 46 + nlen; x + 4 <= p + 46 + nlen + xlen;) {
+      const id = dv.getUint16(x, true); const len = dv.getUint16(x + 2, true);
+      if (id === 0x0001) {
+        let q = x + 4;
+        if (usize === 0xffffffff) { usize = Number(dv.getBigUint64(q, true)); q += 8; }
+        if (csize === 0xffffffff) { csize = Number(dv.getBigUint64(q, true)); q += 8; }
+        if (local === 0xffffffff) { local = Number(dv.getBigUint64(q, true)); }
+      }
+      x += 4 + len;
+    }
+    names.push(nm);
+    if (!nm.endsWith('/') && !/(^|\/)__MACOSX\//.test(nm) && entry.test(nm)) found.push({ nm, method, csize, local });
+    p += 46 + nlen + xlen + clen;
+  }
+  // A data file (.tsv, .csv) rather than a README.txt beside it.
+  const pick = found.find((f) => /\.(tsv|csv)$/i.test(f.nm)) || found[0];
+  if (pick) {
+    const lh = new DataView(await file.slice(pick.local, pick.local + 30).arrayBuffer());
+    if (lh.getUint32(0, true) !== SIG_ZIP) throw new Error('This .zip file is damaged or incomplete.');
+    const start = pick.local + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+    return { name: pick.nm.split('/').pop(), method: pick.method, start, size: pick.csize };
+  }
+  throw new Error(`The .zip file has no .tsv or .csv file inside${names.length ? ` (it has ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''})` : ''}.`);
+}
+
+// Splits text arriving in pieces into lines (a line may span two pieces).
+function lineSplitter(onLine) {
+  let rest = '';
+  return {
+    push(t) { const lines = (rest + t).split('\n'); rest = lines.pop(); for (const l of lines) onLine(l.endsWith('\r') ? l.slice(0, -1) : l); },
+    end() { if (rest) onLine(rest.endsWith('\r') ? rest.slice(0, -1) : rest); rest = ''; },
+  };
+}
+
+// RFC 4180 CSV arriving in pieces: quoted fields with commas, doubled quotes and line breaks.
+// delimiter 'auto' chooses tab or comma from the first line.
+function csvSplitter(onRow, delimiter = ',') {
+  let row = []; let field = ''; let quoted = false; let afterQuote = false; let started = false;
+  let head = delimiter === 'auto' ? '' : null;
+  const emit = () => { row.push(field); onRow(row); row = []; field = ''; started = false; };
+  const decide = () => { const first = head.split('\n')[0]; delimiter = (first.match(/\t/g) || []).length > (first.match(/,/g) || []).length ? '\t' : ','; const t = head; head = null; return t; };
+  return {
+    push(chunk) {
+      let t = chunk;
+      if (head !== null) { head += chunk; if (!head.includes('\n')) return; t = decide(); }
+      for (let i = 0; i < t.length; i++) {
+        const ch = t[i];
+        if (afterQuote) {
+          afterQuote = false;
+          if (ch === '"') { field += '"'; continue; }
+          quoted = false;
+        }
+        if (quoted) { if (ch === '"') afterQuote = true; else field += ch; continue; }
+        if (ch === '"' && field === '' && !started) { quoted = true; started = true; continue; }
+        if (ch === delimiter) { row.push(field); field = ''; started = false; continue; }
+        if (ch === '\n') { emit(); continue; }
+        if (ch === '\r') continue;
+        field += ch; started = true;
+      }
+    },
+    end() {
+      if (head !== null) { const t = decide(); if (t) this.push(t); }
+      afterQuote = false; quoted = false; if (field !== '' || row.length) emit();
+    },
+  };
+}
+
+const headerKey = (h) => String(h || '').replace(/^﻿/, '').trim().replace(/^"|"$/g, '').toLowerCase().replace(/[\s_\-#.]+/g, '');
+function findColumns(header, spec) {
+  const keys = header.map(headerKey);
+  const col = {};
+  for (const [field, aliases] of Object.entries(spec)) {
+    const i = keys.findIndex((k) => aliases.includes(k));
+    if (i >= 0) col[field] = i;
+  }
+  return col;
+}
+
+// ---------- the Human Protein Atlas files ----------
+
+const HPA_SUMMARY = {
+  gene: ['gene', 'genename'], synonyms: ['genesynonym', 'genesynonyms'], ensembl: ['ensembl', 'ensemblgeneid', 'ensemblid'], description: ['genedescription'],
+  uniprot: ['uniprot'], evidence: ['evidence', 'hpaevidence', 'proteinevidence'], antibody: ['antibody', 'antibodies'],
+  reliabilityIH: ['reliability(ih)', 'ihreliability', 'reliability(tissue)'], reliabilityIF: ['reliability(if)', 'ifreliability'],
+  rrid: ['antibodyrrid', 'antibodyrrids'], tissueSpecificity: ['rnatissuespecificity'], tissueNtpm: ['rnatissuespecificntpm', 'rnatissuespecifictpm'],
+};
+const HPA_TISSUE = { ensembl: ['gene'], gene: ['genename'], tissue: ['tissue', 'ihctissuename'], cellType: ['celltype'], level: ['level'], reliability: ['reliability'] };
+const LEVELS = ['High', 'Medium', 'Low'];
+const clip = (s, n) => { const t = String(s ?? '').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+
+// Reads either HPA file line by line, keeping only the genes the catalog may need (`wanted`: upper-case symbols and
+// names; `wantedAntibodies`: HPA antibody IDs in catalog numbers):
+//   proteinatlas.tsv (one row per gene): symbol, synonyms, Ensembl and UniProt IDs, IHC and IF reliability, the HPA
+//     antibodies and their RRIDs, and RNA tissue specificity;
+//   normal_tissue.tsv (one row per gene, tissue and cell type): the IHC staining level, kept for High, Medium and Low.
+function hpaReader({ wanted = [], wantedTissue = null, wantedAntibodies = [], maxGenes = 1500, maxTissueGenes = 600, maxTissueRows = 16 } = {}) {
+  const keysOf = (list) => { const set = new Set(); for (const w of list) { set.add(nameKey(w)); set.add(looseKey(w)); } return set; };
+  let want = keysOf(wanted);
+  const wantAb = new Set([...wantedAntibodies].map((x) => String(x).toUpperCase()));
+  let kind = null; let col = null; let rows = 0; let capped = false;
+  const genes = new Map(); const tissue = new Map();
+  const wantedName = (s) => { const t = String(s || '').trim(); return !!t && (want.has(nameKey(t)) || want.has(looseKey(t))); };
+  const cell = (cells, k) => (col[k] == null ? '' : String(cells[col[k]] ?? '').trim().replace(/^"|"$/g, ''));
+  return {
+    line(raw) {
+      if (!raw.trim()) return;
+      const cells = raw.split('\t');
+      if (!kind) {
+        if (cells.length < 3) throw new Error('This is not a tab-separated HPA download. Choose proteinatlas.tsv (or .tsv.zip) or normal_tissue.tsv from proteinatlas.org/about/download.');
+        const t = findColumns(cells, HPA_TISSUE); const s = findColumns(cells, HPA_SUMMARY);
+        if (t.level != null && t.cellType != null && t.gene != null && t.tissue != null) { kind = 'tissue'; col = t; if (wantedTissue) want = keysOf(wantedTissue); }
+        else if (s.gene != null && s.ensembl != null) { kind = 'summary'; col = s; }
+        else throw new Error(`The file's columns are not those of an HPA download (it starts ${cells.slice(0, 4).join(', ')}). Choose proteinatlas.tsv or normal_tissue.tsv.`);
+        return;
+      }
+      rows++;
+      if (kind === 'summary') {
+        const gene = cell(cells, 'gene');
+        if (!gene) return;
+        const synonyms = cell(cells, 'synonyms').split(/\s*,\s*/).filter(Boolean);
+        const antibodyIds = cell(cells, 'antibody').split(/[\s,;]+/).filter((x) => /^[A-Za-z]{2,5}\d{4,7}$/.test(x)).map((x) => x.toUpperCase().replace(/^AMAB/, 'AMAb'));
+        if (!(wantedName(gene) || synonyms.some(wantedName) || antibodyIds.some((x) => wantAb.has(x.toUpperCase())))) return;
+        if (genes.size >= maxGenes && !genes.has(geneKey(gene))) { capped = true; return; }
+        const rridText = cell(cells, 'rrid');
+        const pairs = new Map([...rridText.matchAll(/([A-Za-z]{2,5}\d{4,7})\W{0,4}?(AB_\d+)/g)].map((m) => [m[1].toUpperCase().replace(/^AMAB/, 'AMAb'), m[2]]));
+        const bare = [...rridText.matchAll(/AB_\d+/g)].map((m) => m[0]);
+        const antibodies = antibodyIds.slice(0, 12).map((id, i) => ({ id, rrid: pairs.get(id) || (!pairs.size && bare.length === antibodyIds.length ? bare[i] : '') }));
+        genes.set(geneKey(gene), {
+          gene, ensembl: cell(cells, 'ensembl'), synonyms: synonyms.slice(0, 15).map((x) => clip(x, 40)), description: clip(cell(cells, 'description'), 160),
+          uniprot: cell(cells, 'uniprot').split(/[\s,;]+/).filter((x) => UNIPROT.test(x)).slice(0, 3), evidence: clip(cell(cells, 'evidence'), 60),
+          reliabilityIH: clip(cell(cells, 'reliabilityIH'), 30), reliabilityIF: clip(cell(cells, 'reliabilityIF'), 30), antibodies,
+          tissueSpecificity: clip(cell(cells, 'tissueSpecificity'), 60), tissueNtpm: clip(cell(cells, 'tissueNtpm'), 200),
+        });
+      } else {
+        const gene = cell(cells, 'gene');
+        if (!gene || !wantedName(gene)) return;
+        const level = LEVELS.find((l) => l.toLowerCase() === cell(cells, 'level').toLowerCase());
+        const k = geneKey(gene);
+        if (!tissue.has(k)) {
+          if (tissue.size >= maxTissueGenes) { capped = true; return; }
+          tissue.set(k, { gene, ensembl: cell(cells, 'ensembl'), reliability: '', rows: [] });
+        }
+        const t = tissue.get(k);
+        t.reliability ||= clip(cell(cells, 'reliability'), 30);
+        if (level) t.rows.push({ tissue: clip(cell(cells, 'tissue'), 60), cell: clip(cell(cells, 'cellType'), 60), level });
+      }
+    },
+    result() {
+      if (!kind) throw new Error('The file is empty.');
+      const missing = Object.keys(kind === 'summary' ? HPA_SUMMARY : HPA_TISSUE).filter((k) => col[k] == null);
+      if (kind === 'summary') return { kind, rows, capped, missing, genes: [...genes.values()] };
+      const order = (l) => LEVELS.indexOf(l);
+      return { kind, rows, capped, missing, tissue: [...tissue.values()].map((t) => ({ ...t, rows: t.rows.sort((x, y) => order(x.level) - order(y.level)).slice(0, maxTissueRows) })) };
+    },
+  };
+}
+
+// ---------- the Antibody Registry download ----------
+
+const REGISTRY = {
+  rrid: ['rrid', 'abid', 'antibodyid', 'abidentifier'], citation: ['propercitation', 'citation'], catalog: ['catalognum', 'catalognumber', 'catnum', 'catalog', 'catno', 'catalognumbers'],
+  vendor: ['vendor', 'vendorname', 'company', 'manufacturer', 'supplier'], name: ['abname', 'antibodyname', 'name', 'productname'],
+  target: ['abtarget', 'targetantigen', 'target', 'antigen'], clone: ['cloneid', 'clone'],
+};
+const toRrid = (v) => { const s = String(v || '').trim(); const m = s.match(/AB_(\d{1,10})/i); return m ? `AB_${m[1]}` : /^\d{1,10}$/.test(s) ? `AB_${s}` : ''; };
+
+// Keeps the registry rows whose catalog number matches a catalog antibody's: the same number, a size or format of it
+// ("14-0195" -> "14-0195-82"), or a letter suffix ("9027" -> "9027S"). The download has millions of rows; the few hundred
+// that match are kept (3,000 at most).
+function registryReader({ catalogs = [], maxRows = 3000 } = {}) {
+  const keys = new Set(); const raws = new Set();
+  for (const c of catalogs) { const r = catalogRaw(c); if (r) { raws.add(r); keys.add(r.replace(/-/g, '')); } }
+  let col = null; let rows = 0; let capped = false;
+  const kept = [];
+  const matches = (rr) => {
+    const rk = rr.replace(/-/g, '');
+    if (keys.has(rk)) return true;
+    if (/[A-Z]$/.test(rk) && keys.has(rk.slice(0, -1))) return true;
+    for (let i = rr.lastIndexOf('-'); i > 0; i = rr.lastIndexOf('-', i - 1)) if (raws.has(rr.slice(0, i))) return true;
+    return false;
+  };
+  return {
+    row(cells) {
+      if (cells.every((c) => !String(c).trim())) return;   // blank lines, before the header or between rows
+      if (!col) {
+        col = findColumns(cells, REGISTRY);
+        if ((col.rrid == null && col.citation == null) || col.catalog == null) {
+          const got = cells.slice(0, 6).join(', ');
+          col = null;
+          throw new Error(`The file needs an RRID (or proper citation) column and a catalog number column; it has ${got}. Download the registry list from antibodyregistry.org (signed in).`);
+        }
+        return;
+      }
+      rows++;
+      const get = (k) => (col[k] == null ? '' : String(cells[col[k]] ?? '').trim());
+      const catalog = get('catalog');
+      if (!catalog) return;
+      const rr = catalogRaw(catalog);
+      if (!rr || !matches(rr)) return;
+      const rrid = toRrid(get('rrid')) || toRrid(get('citation'));
+      if (!rrid) return;
+      if (kept.length >= maxRows) { capped = true; return; }
+      kept.push({ rrid, catalog: clip(catalog, 40), vendor: clip(get('vendor'), 80), name: clip(get('name'), 120), target: clip(get('target'), 60), clone: clip(get('clone'), 40) });
+    },
+    result() {
+      if (!col) throw new Error('The file is empty.');
+      return { rows, capped, kept };
+    },
+  };
+}
+
+// What the browser should keep when reading the big files, from the catalog: symbols and names for the HPA, single
+// catalog numbers for the registry.
+function importWants(assays, hpaGenes = {}) {
+  const loaded = Object.keys(hpaGenes).length > 0;
+  const idx = loaded ? buildSynonymIndex(hpaGenes) : null;
+  const symbols = new Set(); const antibodies = new Set(); const catalogs = new Set(); const tissueSymbols = new Set();
+  for (const a of assays) {
+    if (a.status === 'Duplicate') continue;
+    if (hasGene(a)) { symbols.add(geneKey(a.target)); tissueSymbols.add(geneKey(a.target)); }
+    const id = hpaAntibodyId(a.catalog); if (id) antibodies.add(id);
+    if (!singleAntibody(a)) continue;
+    const c = catalogRaw(a.catalog); if (c) catalogs.add(c);
+    if (hasGene(a)) continue;
+    for (const p of namePhrases(a.name).phrases) {
+      if (p.length < 2 || !/[a-z]/.test(p)) continue;
+      symbols.add(p.toUpperCase());
+      const alias = aliasOf(p);
+      if (alias) { symbols.add(alias); tissueSymbols.add(alias); }
+    }
+    const best = targetCandidates(a, loaded ? hpaGenes : null, loaded ? idx : null)[0];
+    if (best && best.symbol !== 'N/A') tissueSymbols.add(geneKey(best.symbol));
+  }
+  for (const k of Object.keys(hpaGenes)) symbols.add(k);
+  return { symbols: [...symbols], antibodies: [...antibodies], catalogs: [...catalogs], tissueSymbols: [...tissueSymbols] };
+}
+
+return { SOURCES, OTHER_SOURCE, sourceByKey, HPA_LICENCE, NOT_APPLICABLE, readRrid, readUniprot, readGene, geneKey, hasGene, hasRrid, hostAllowed, readReference, catalogRaw, catalogKey, vendorKey, vendorsMatch, hpaAntibodyId, singleAntibody, nameKey, looseKey, TARGET_ALIASES, namePhrases, targetCandidates, buildSynonymIndex, registryIndex, rridCandidates, sourceLinks, readTextChunks, lineSplitter, csvSplitter, hpaReader, registryReader, importWants };
+});
+
 __define('core', function () {
 // MHL LIMS pilot: application core.
 //
@@ -3872,6 +4506,7 @@ const ESTX = __require('estimates');
 const MAIL = __require('estimatemail');
 const XEN = __require('xenium');
 const ANIMALS = __require('animallist');
+const OUT = __require('outside');
 const { describe, sig, fisherExact } = __require('stats');
 const { AREAS, AREA_ORDER, TERMINAL_AREAS, REQUEST_TYPES, SPECIES, DICTIONARIES, NECROPSY_EXTRAS, PERFUSION_CODES, PATHOLOGISTS } = __require('defs');
 class HttpError extends Error {
@@ -3886,7 +4521,7 @@ function addDays(iso, days) {
 
 function emptyState(today) {
   return {
-    version: 8,
+    version: 9,
     createdOn: today,
     settings: { initials: '', pricingFrom: '2026-01-01', instrumentFolders: { chemistry: '', hematology: '' } },
     counters: {},
@@ -3900,10 +4535,24 @@ function emptyState(today) {
     wsi: newWsi(),
     estimates: [],
     xenium: { runs: [] },
+    outside: newOutside(),
   };
 }
 
+// Data imported from outside IHC sources: the HPA download files and the Antibody Registry rows that match the catalog.
+const newOutside = () => ({ hpa: { version: '', summary: null, tissue: null, genes: {}, tissueByGene: {} }, registry: { import: null, rows: [] } });
+
 const newWsi = () => ({ scanners: WSIX.SCANNERS.map((s) => ({ ...s, status: 'Available', folder: '', serials: [], notes: '' })), images: [], runs: [] });
+
+// Data saved before version 9: assays gain their links to outside sources (the target's gene symbol, UniProt accession
+// and RRID, all empty, and no saved pages), and there is room for imported HPA and Antibody Registry data.
+function upgradeToV9(state) {
+  if (state.version >= 9 && state.outside) return false;
+  for (const a of state.assays || []) { a.target ??= ''; a.uniprot ??= ''; a.rrid ??= ''; a.refs ??= []; }
+  state.outside ||= newOutside();
+  state.version = 9;
+  return true;
+}
 
 // Data saved before version 8: assays gain the fields the IHC team asked for (clone, host, clonality, platform and
 // chromogen set by hand, public or not, preferred, whether it works), and their kind, platform and chromogen are worked
@@ -3983,7 +4632,8 @@ function loadAssays(ihcCatalog) {
       name: '', dilution: '', retrieval: '', digestion: '', kit: '', fixative: '', species: '', control: '', manufacturer: '', catalog: '',
       kind: 'IHC', plex: 1, chromogen: 'DAB', platform: 'Manual', speciesTags: [], fixTags: [], status: 'Active', list: null, sourceLine: null,
       flags: [], repairs: {}, doubleStain: null, components: null, partOf: [], duplicateOf: null, notes: '', updatedAt: null,
-      clone: '', host: '', clonality: '', platformSet: '', chromogenSet: '', visibility: 'Public', preferred: false, result: '', ...a,
+      clone: '', host: '', clonality: '', platformSet: '', chromogenSet: '', visibility: 'Public', preferred: false, result: '',
+      target: '', uniprot: '', rrid: '', refs: [], ...a,
     };
     if (!x.components) {
       const d = IHC.applyDetection(IHC.classify(x), x);
@@ -4029,6 +4679,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
   if (upgradeToV6(state)) commit();
   if (upgradeToV7(state)) commit();
   if (upgradeToV8(state)) commit();
+  if (upgradeToV9(state)) commit();
 
   function audit(action, entity, entityId, detail = '', who = null) {
     state.audit.push({ id: nextId(), at: clock.now(), by: who || by(), action, entity, entityId, detail });
@@ -4232,7 +4883,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
     hits.sort((a, b) => b.received.localeCompare(a.received) || b.number.localeCompare(a.number));
     // Antibodies in the IHC catalog, so "CD8" or "ab101500" finds the assay too.
     const q = raw.toLowerCase();
-    const found = /^[\d-]+[a-z]?$/i.test(raw) && raw.length > 5 ? [] : state.assays.filter((a) => a.status === 'Active' && (a.name.toLowerCase().includes(q) || a.catalog.toLowerCase().includes(q)));
+    const found = /^[\d-]+[a-z]?$/i.test(raw) && raw.length > 5 ? [] : state.assays.filter((a) => a.status === 'Active' && (a.name.toLowerCase().includes(q) || a.catalog.toLowerCase().includes(q) || (a.target || '').toLowerCase() === q || (a.rrid || '').toLowerCase() === q.replace(/^rrid:\s*/, '')));
     found.sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)) || a.name.localeCompare(b.name));
     return { hits: hits.slice(0, 50), assays: { count: found.length, top: found.slice(0, 6).map((a) => ({ id: a.id, name: a.name, kind: IHC.kindLabel(a), species: a.species, catalog: a.catalog })) } };
   }
@@ -5392,6 +6043,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
       ...assaySummary(a), digestion: a.digestion, notes: a.notes, updatedAt: a.updatedAt, sourceLine: a.sourceLine,
       clone: a.clone || '', host: a.host || '', clonality: a.clonality || '', cloneShown: ab.several ? 'Several antibodies' : ab.cloneNotApplicable ? 'N/A' : ab.clone,
       hostShown: ab.host, clonalityShown: ab.clonality, isotype: ab.isotype, platformSet: a.platformSet || '', chromogenSet: a.chromogenSet || '',
+      target: a.target || '', uniprot: a.uniprot || '', rrid: a.rrid || '', refCount: (a.refs || []).length,
     };
   }
 
@@ -5408,7 +6060,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
       && (!query.vis || (a.visibility || 'Public') === query.vis)
       && (query.pref !== '1' || a.preferred)
       && (query.result === undefined || query.result === '' || (query.result === 'none' ? !a.result : a.result === query.result))
-      && words.every((w) => (/^#\d+$/.test(w) ? a.id === Number(w.slice(1)) : `${a.name} ${a.catalog} ${a.manufacturer} ${a.kit} ${a.clone || ''} ${a.host || ''}`.toLowerCase().includes(w))));
+      && words.every((w) => (/^#\d+$/.test(w) ? a.id === Number(w.slice(1)) : `${a.name} ${a.catalog} ${a.manufacturer} ${a.kit} ${a.clone || ''} ${a.host || ''} ${a.target || ''} ${a.rrid || ''}`.toLowerCase().includes(w.replace(/^rrid:/, '')))));
     const q = words.join(' ');
     const qre = new RegExp(`^${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^0-9]|$)`);
     // In a search, preferred protocols come first among equally good matches, and ones marked "Did not work" last.
@@ -5459,6 +6111,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
       duplicateOf: a.duplicateOf ? assaySummary(assayById(a.duplicateOf)) : null,
       sameName: state.assays.filter((x) => x.id !== a.id && x.name.toLowerCase() === a.name.toLowerCase()).map((x) => assaySummary(x)),
       usedIn, history: state.audit.filter((x) => x.entity === 'assay' && x.entityId === a.id).slice(-30).reverse(),
+      outside: outsideOf(a),
     };
   }
 
@@ -5551,6 +6204,204 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
       commit();
       return { ok: true };
     };
+  }
+
+  // ---------- outside IHC sources ----------
+  // Links from each assay to the HPA, the Antibody Registry, Antibodypedia, CiteAb, NordiQC and ImmunoQuery; the assay's
+  // own identifiers (target gene, UniProt, RRID) that make the links exact; pages staff saved; and the HPA and registry
+  // data imported from their download files (see core/outside.mjs for what each source allows).
+  const hpaGenes = () => state.outside.hpa.genes;
+  const hpaLoaded = () => Object.keys(state.outside.hpa.genes).length > 0;
+  // Built once per import (the objects are replaced on import, and on rollback).
+  let synCache = { of: null, idx: null }; let regCache = { of: null, idx: null };
+  const synonymIndex = () => (synCache.of === state.outside.hpa.genes ? synCache.idx : (synCache = { of: state.outside.hpa.genes, idx: OUT.buildSynonymIndex(state.outside.hpa.genes) }).idx);
+  const registryIdx = () => (regCache.of === state.outside.registry.rows ? regCache.idx : (regCache = { of: state.outside.registry.rows, idx: OUT.registryIndex(state.outside.registry.rows) }).idx);
+  const hpaGeneOf = (a) => (OUT.hasGene(a) ? hpaGenes()[OUT.geneKey(a.target)] || null : null);
+  const targetSuggestions = (a) => (a.target ? [] : OUT.targetCandidates(a, hpaLoaded() ? hpaGenes() : null, hpaLoaded() ? synonymIndex() : null));
+  const rridSuggestions = (a) => (a.rrid ? [] : OUT.rridCandidates(a, registryIdx(), hpaGenes()));
+  const importMeta = (m) => (m ? { file: m.file, version: m.version || '', rows: m.rows, count: m.count, importedAt: m.importedAt, by: m.by, capped: !!m.capped, missing: m.missing || [] } : null);
+
+  function outsideOf(a) {
+    const g = hpaGeneOf(a);
+    const tissue = OUT.hasGene(a) ? state.outside.hpa.tissueByGene[OUT.geneKey(a.target)] || null : null;
+    return {
+      single: OUT.singleAntibody(a), target: a.target || '', uniprot: a.uniprot || '', rrid: a.rrid || '', refs: a.refs || [],
+      links: OUT.sourceLinks(a, { hpaGene: g }),
+      hpa: g || tissue ? { gene: g, tissue, version: state.outside.hpa.summary?.version ?? state.outside.hpa.version, tissueVersion: state.outside.hpa.tissue?.version || '', licence: OUT.HPA_LICENCE,
+        notHuman: !a.speciesTags.some((t) => t === 'Human' || t === 'Human xenograft' || t === 'Humanized mouse') } : null,
+      hpaLoaded: hpaLoaded(), hpaTissueLoaded: !!state.outside.hpa.tissue, registryLoaded: !!state.outside.registry.import,
+      targetSuggestions: targetSuggestions(a), rridSuggestions: rridSuggestions(a),
+      targetNotInHpa: OUT.hasGene(a) && hpaLoaded() && !g,
+      uniprotFromHpa: !a.uniprot && g?.uniprot?.length ? g.uniprot.join(', ') : '',
+    };
+  }
+
+  const ID_FIELDS = [['target', 'Target gene', OUT.readGene], ['uniprot', 'UniProt', OUT.readUniprot], ['rrid', 'RRID', OUT.readRrid]];
+  function setIdentifiers(a, body, note = '') {
+    const changed = [];
+    for (const [k, label, read] of ID_FIELDS) {
+      if (body[k] === undefined) continue;
+      const r = read(text(body[k], 200));
+      if (r.error) fail(`${label}: ${r.error}`);
+      // A panel's antibodies each have their own gene and RRID, on their single-stain protocols (clearing is allowed).
+      if (r.value && !OUT.singleAntibody(a)) fail(`${a.name} uses several antibodies; record the ${label.toLowerCase()} on each single-stain protocol.`);
+      if (r.value !== (a[k] || '')) { changed.push(`${label}: ${a[k] || '(blank)'} → ${r.value || '(blank)'}`); a[k] = r.value; }
+    }
+    if (changed.length) { a.updatedAt = clock.now(); audit('ASSAY_IDS', 'assay', a.id, `${changed.join('; ')}${note}`); }
+    return changed.length;
+  }
+  function saveIdentifiers({ params, body }) {
+    const a = getAssay(params[0]);
+    const n = setIdentifiers(a, body);
+    if (n) commit();
+    return { id: a.id, changed: n };
+  }
+
+  function addReference({ params, body }) {
+    const a = getAssay(params[0]);
+    const r = OUT.readReference(body);
+    if (r.error) fail(r.error);
+    a.refs ||= [];
+    if (r.value.url && a.refs.some((x) => x.url === r.value.url)) fail('That page is already saved on this assay.');
+    if (a.refs.length >= 30) fail('An assay can keep 30 saved pages; remove one first.');
+    const ref = { id: nextId(), ...r.value, savedOn: clock.today(), by: by() };
+    a.refs.push(ref);
+    a.updatedAt = clock.now();
+    audit('ASSAY_REF_ADDED', 'assay', a.id, `${OUT.sourceByKey(ref.source).name}: ${ref.url || ref.note.slice(0, 80)}`);
+    commit();
+    return { id: ref.id };
+  }
+  function removeReference({ params }) {
+    const a = getAssay(params[0]);
+    const i = (a.refs || []).findIndex((x) => x.id === Number(params[1]));
+    if (i < 0) throw new HttpError(404, 'Saved page not found.');
+    const [ref] = a.refs.splice(i, 1);
+    a.updatedAt = clock.now();
+    audit('ASSAY_REF_REMOVED', 'assay', a.id, `${OUT.sourceByKey(ref.source)?.name || ref.source}: ${ref.url || ref.note.slice(0, 80)}`);
+    commit();
+    return { ok: true };
+  }
+
+  // Molecular > Outside sources: what each source allows, what has been imported, how much of the catalog is linked, and
+  // the suggestions to review in bulk.
+  function outsideSummary() {
+    const live = state.assays.filter((a) => a.status === 'Active');
+    const single = live.filter(OUT.singleAntibody);
+    const review = [];
+    for (const a of single) {
+      const t = targetSuggestions(a)[0] || null; const r = rridSuggestions(a)[0] || null;
+      if (t || r) review.push({ id: a.id, name: a.name, catalog: a.catalog, manufacturer: a.manufacturer, target: a.target || '', rrid: a.rrid || '', targetSuggestion: t, rridSuggestion: r });
+    }
+    const h = state.outside.hpa;
+    return {
+      sources: OUT.SOURCES.map(({ key, name, home, use, access, what, caution }) => ({ key, name, home, use, access, what, caution: caution || '' })),
+      hpa: { version: h.version, summary: importMeta(h.summary), tissue: importMeta(h.tissue), genes: Object.keys(h.genes).length, tissueGenes: Object.keys(h.tissueByGene).length, licence: OUT.HPA_LICENCE },
+      registry: { import: importMeta(state.outside.registry.import), rows: state.outside.registry.rows.length },
+      coverage: { active: live.length, single: single.length, withTarget: single.filter((a) => OUT.hasGene(a)).length, targetNA: single.filter((a) => a.target === 'N/A').length,
+        withRrid: single.filter(OUT.hasRrid).length, rridNA: single.filter((a) => a.rrid === 'N/A').length, withRefs: live.filter((a) => (a.refs || []).length).length },
+      wants: OUT.importWants(state.assays, h.genes),
+      review: review.sort((x, y) => x.name.localeCompare(y.name, 'en', { sensitivity: 'base' }) || x.id - y.id),
+      storedKb: Math.round(JSON.stringify(state.outside).length / 1024),
+    };
+  }
+
+  // Imported data comes from the browser: only strings and numbers are kept, without control characters.
+  const cleanText = (v, max) => (typeof v === 'string' || typeof v === 'number' ? text(v, max).replace(/[\u0000-\u001f]/g, ' ') : '');
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  // The standalone keeps everything in the browser's storage (about 5 million characters); outside data may use 2 million.
+  const OUTSIDE_BUDGET = 2_000_000;
+  const checkBudget = () => {
+    const n = JSON.stringify(state.outside).length;
+    if (n > OUTSIDE_BUDGET) fail(`That would make the imported outside data ${Math.round(n / 1000).toLocaleString('en-US')} thousand characters, more than the pilot can keep (${(OUTSIDE_BUDGET / 1000).toLocaleString('en-US')} thousand). Remove the other import first, or import fewer genes.`);
+  };
+  const strList = (v, n, max) => (Array.isArray(v) ? v.slice(0, n).map((x) => cleanText(x, max)).filter(Boolean) : []);
+  function importHpa({ body }) {
+    const kind = body.kind;
+    if (kind !== 'summary' && kind !== 'tissue') fail('Choose proteinatlas.tsv or normal_tissue.tsv from the HPA downloads.');
+    const list = kind === 'summary' ? body.genes : body.tissue;
+    if (!Array.isArray(list)) fail('Nothing was read from the file.');
+    const cap = kind === 'summary' ? 1500 : 600;
+    if (list.length > cap) fail(`More than ${cap.toLocaleString('en-US')} genes were read; the import keeps only genes the catalog needs. Reload the page and try again.`);
+    if (!list.every(isObj)) fail('The file was not read correctly; is this an HPA file?');
+    const sym = (v) => { const g = cleanText(v, 30); if (!/^[A-Za-z0-9][A-Za-z0-9\-.@]{0,29}$/.test(g)) fail(`"${g}" is not a gene symbol; is this an HPA file?`); return g; };
+    const ensg = (v) => { const e = cleanText(v, 20); return /^ENSG\d{11}$/.test(e) ? e : ''; };
+    const version = cleanText(body.version, 20);
+    const meta = { file: cleanText(body.file, 120) || 'HPA file', version, rows: Math.max(0, Number(body.rows) || 0), count: list.length, importedAt: clock.now(), by: by(), capped: !!body.capped, missing: strList(body.missing, 20, 40) };
+    const h = state.outside.hpa;
+    if (kind === 'summary' || !h.version) h.version = version;
+    if (kind === 'summary') {
+      const genes = {};
+      for (const g of list) {
+        const gene = sym(g.gene);
+        genes[OUT.geneKey(gene)] = {
+          gene, ensembl: ensg(g.ensembl), synonyms: strList(g.synonyms, 15, 40), description: cleanText(g.description, 160),
+          uniprot: strList(g.uniprot, 3, 12).filter((x) => !OUT.readUniprot(x).error), evidence: cleanText(g.evidence, 60),
+          reliabilityIH: cleanText(g.reliabilityIH, 30), reliabilityIF: cleanText(g.reliabilityIF, 30),
+          antibodies: (Array.isArray(g.antibodies) ? g.antibodies.slice(0, 12) : []).filter(isObj).map((x) => ({ id: cleanText(x.id, 12), rrid: /^AB_\d{1,10}$/.test(x?.rrid || '') ? x.rrid : '' })).filter((x) => /^[A-Za-z]{2,5}\d{4,7}$/.test(x.id)),
+          tissueSpecificity: cleanText(g.tissueSpecificity, 60), tissueNtpm: cleanText(g.tissueNtpm, 200),
+        };
+      }
+      h.genes = genes; h.summary = meta;
+    } else {
+      const byGene = {};
+      for (const t of list) {
+        const gene = sym(t.gene);
+        byGene[OUT.geneKey(gene)] = { gene, ensembl: ensg(t.ensembl), reliability: cleanText(t.reliability, 30),
+          rows: (Array.isArray(t.rows) ? t.rows.slice(0, 16) : []).filter(isObj).map((r) => ({ tissue: cleanText(r.tissue, 60), cell: cleanText(r.cell, 60), level: ['High', 'Medium', 'Low'].includes(r.level) ? r.level : '' })).filter((r) => r.level && r.tissue) };
+      }
+      h.tissueByGene = byGene; h.tissue = meta;
+    }
+    checkBudget();
+    audit('OUTSIDE_IMPORTED', 'outside', null, `Human Protein Atlas ${kind === 'summary' ? 'gene summary' : 'normal tissue IHC'}${h.version ? ` v${h.version}` : ''} from ${meta.file}: ${list.length} genes kept of ${meta.rows} rows`);
+    commit();
+    return { kind, kept: list.length };
+  }
+
+  function importRegistry({ body }) {
+    const list = body.kept;
+    if (!Array.isArray(list)) fail('Nothing was read from the file.');
+    if (list.length > 3000) fail('More than 3,000 rows were kept; that is not what the catalog needs.');
+    if (!list.every(isObj)) fail('The file was not read correctly; is this the Antibody Registry download?');
+    const rows = list.map((r) => {
+      const rrid = OUT.readRrid(cleanText(r?.rrid, 40));
+      if (rrid.error || !rrid.value || rrid.value === 'N/A') fail(`"${cleanText(r?.rrid, 40)}" is not an antibody RRID; is this the Antibody Registry download?`);
+      return { rrid: rrid.value, catalog: cleanText(r.catalog, 40), vendor: cleanText(r.vendor, 80), name: cleanText(r.name, 120), target: cleanText(r.target, 60), clone: cleanText(r.clone, 40) };
+    }).filter((r) => r.catalog);
+    state.outside.registry = { rows, import: { file: cleanText(body.file, 120) || 'registry file', rows: Math.max(0, Number(body.rows) || 0), count: rows.length, importedAt: clock.now(), by: by(), capped: !!body.capped, missing: [] } };
+    checkBudget();
+    audit('OUTSIDE_IMPORTED', 'outside', null, `Antibody Registry from ${state.outside.registry.import.file}: ${rows.length} rows kept of ${state.outside.registry.import.rows}`);
+    commit();
+    return { kept: rows.length };
+  }
+
+  function clearOutside({ body }) {
+    if (body.which === 'hpa') state.outside.hpa = newOutside().hpa;
+    else if (body.which === 'registry') state.outside.registry = newOutside().registry;
+    else fail('Say which imported data to remove: hpa or registry.');
+    audit('OUTSIDE_CLEARED', 'outside', null, body.which === 'hpa' ? 'Human Protein Atlas data removed' : 'Antibody Registry data removed');
+    commit();
+    return { ok: true };
+  }
+
+  // Accepting suggestions from the review list: each fills an empty field only; a field someone has filled is left alone.
+  function acceptSuggestions({ body }) {
+    const items = Array.isArray(body.items) ? body.items.slice(0, 2000) : [];
+    if (!items.length) fail('Tick the suggestions to accept.');
+    let accepted = 0; const skipped = [];
+    const byAssay = new Map();
+    for (const it of items) {
+      const a = assayById(it?.assayId);
+      const field = ID_FIELDS.find(([k]) => k === it?.field);
+      if (!a || !field) { skipped.push(`#${it?.assayId}: not found`); continue; }
+      if (!OUT.singleAntibody(a)) { skipped.push(`#${a.id} ${a.name}: uses several antibodies`); continue; }
+      if (a[field[0]]) { skipped.push(`#${a.id} ${a.name}: ${field[1]} is already ${a[field[0]]}`); continue; }
+      const r = field[2](text(it.value, 200));
+      if (r.error || !r.value) { skipped.push(`#${a.id} ${a.name}: ${r.error || 'no value'}`); continue; }
+      const b = byAssay.get(a) || {}; b[field[0]] = r.value; byAssay.set(a, b);
+    }
+    for (const [a, b] of byAssay) accepted += setIdentifiers(a, b, ' (accepted from the outside sources review)');
+    if (accepted) commit();
+    return { accepted, skipped };
   }
 
   // ---------- IHC requests from the web form ----------
@@ -7594,6 +8445,14 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/check$/, confirmAssay],
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/retire$/, setAssayStatus('Retired')],
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/restore$/, setAssayStatus('Active')],
+    ['PUT', /^\/api\/ihc\/assays\/(\d+)\/identifiers$/, saveIdentifiers],
+    ['POST', /^\/api\/ihc\/assays\/(\d+)\/refs$/, addReference],
+    ['POST', /^\/api\/ihc\/assays\/(\d+)\/refs\/(\d+)\/remove$/, removeReference],
+    ['GET', /^\/api\/ihc\/outside$/, outsideSummary],
+    ['POST', /^\/api\/ihc\/outside\/hpa$/, importHpa],
+    ['POST', /^\/api\/ihc\/outside\/registry$/, importRegistry],
+    ['POST', /^\/api\/ihc\/outside\/clear$/, clearOutside],
+    ['POST', /^\/api\/ihc\/outside\/accept$/, acceptSuggestions],
     ['GET', /^\/api\/ihc\/requests$/, listIhc],
     ['POST', /^\/api\/ihc\/requests$/, submitIhc],
     ['POST', /^\/api\/ihc\/estimate$/, estimateDraft],
@@ -7710,7 +8569,7 @@ function createCore({ state, priceList, ihcCatalog = null, clock, save = () => {
   return { handle, state, findingText };
 }
 
-return { HttpError, addDays, emptyState, upgradeToV8, upgradeToV7, upgradeToV6, upgradeToV5, upgradeToV4, loadAssays, createCore };
+return { HttpError, addDays, emptyState, newOutside, upgradeToV9, upgradeToV8, upgradeToV7, upgradeToV6, upgradeToV5, upgradeToV4, loadAssays, createCore };
 });
 
 __define('seed', function () {
@@ -10124,6 +10983,7 @@ __define('assays', function () {
 // catalog as an Excel workbook.
 const { $, $$, api, esc, fmtDate, fmtDateTime, getMeta, act, pageTop, options, navigate, kindBadge, saveFile } = __require('ui');
 const { ihcTabs } = __require('ihcviews');
+const { assayOutsideHtml, wireAssayOutside } = __require('outsideviews');
 const { classify, applyDetection, speciesTags: readSpecies, fixativeTags: readFixatives, catalogSheets } = __require('ihc');
 const { writeXlsx, XLSX_TYPE } = __require('xlsxwrite');
 const KINDS = [['', 'All'], ['ihc', 'IHC'], ['multiplex', 'Multiplex and double stains'], ['fluorescent', 'Fluorescent (Opal, IF)'], ['other', 'TUNEL and β-gal']];
@@ -10207,6 +11067,7 @@ async function renderAssays(app, params) {
   if (!f.q) $('#q').focus();
 }
 
+const HISTORY_WORDS = { ASSAY_IDS: 'identifiers', ASSAY_REF_ADDED: 'page saved', ASSAY_REF_REMOVED: 'page removed' };
 // Clone, host and isotype as shown in lists (see antibodyInfo in core/ihc.mjs).
 const abText = (ab) => (!ab ? '' : ab.several ? 'Several antibodies' : [ab.clone ? `Clone ${ab.clone}` : ab.cloneNotApplicable ? 'Clone N/A' : '',
   [ab.host && ab.host !== 'Not applicable' ? ab.host : '', ab.clonality && ab.clonality !== 'Not applicable' ? ab.clonality.toLowerCase() : ''].filter(Boolean).join(' '),
@@ -10267,11 +11128,13 @@ async function renderAssay(app, id) {
         <h2 class="section">Requested in</h2>
         ${d.usedIn.length ? `<table class="t"><tbody>${d.usedIn.map((u) => `<tr><td><a class="idtxt" href="#/molecular/request/${u.id}">${esc(u.number)}</a></td><td>${esc(u.investigator)}</td><td>${fmtDate(u.submittedOn)}</td><td>${esc(u.status)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Not requested in the pilot yet.</p>'}
         <h2 class="section">Changes</h2>
-        ${d.history.length ? `<table class="t"><tbody>${d.history.map((h) => `<tr><td>${fmtDateTime(h.at)}</td><td>${esc(h.by)}</td><td>${esc(h.action.replace(/^ASSAY_/, '').toLowerCase())}<br><span class="small muted">${esc(h.detail)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes since it was imported.</p>'}
+        ${d.history.length ? `<table class="t"><tbody>${d.history.map((h) => `<tr><td>${fmtDateTime(h.at)}</td><td>${esc(h.by)}</td><td>${esc(HISTORY_WORDS[h.action] || h.action.replace(/^ASSAY_/, '').toLowerCase())}<br><span class="small muted">${esc(h.detail)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes since it was imported.</p>'}
       </div>
-    </div>`;
+    </div>
+    <div class="section" id="outside">${assayOutsideHtml(a, d.outside)}</div>`;
   pageTop(app);
   const reload = () => renderAssay(app, id);
+  wireAssayOutside($('#outside'), a, async () => { const y = window.scrollY; await reload(); window.scrollTo(0, y); });
   $('#check')?.addEventListener('click', (e) => act(e.currentTarget, async () => { await api('POST', `/api/ihc/assays/${a.id}/check`, {}); await getMeta(true); await reload(); }, 'Marked as checked'));
   $('#retire')?.addEventListener('click', (e) => {
     const reason = prompt(`Retire ${a.name} (#${a.id})? It stays in the catalog but can no longer be requested. Reason:`, '');
@@ -10410,7 +11273,7 @@ const { $, $$, api, esc, money, fmtDate, fmtDateTime, getMeta, sectionName, act,
 function ihcTabs(current, meta) {
   const t = [['requests', '#/molecular', `IHC requests${meta.ihc.unassigned ? ` <span class="count" title="Not assigned yet">${meta.ihc.unassigned}</span>` : ''}`],
     ['xenium', '#/molecular/xenium', `Xenium${meta.ihc.xeniumQueue ? ` <span class="count" title="MHL numbers waiting for a run">${meta.ihc.xeniumQueue}</span>` : ''}`],
-    ['catalog', '#/molecular/assays', 'Assay catalog'], ['calculator', '#/molecular/calculator', 'Antibody dilution calculator']];
+    ['catalog', '#/molecular/assays', 'Assay catalog'], ['outside', '#/molecular/outside', 'Outside sources'], ['calculator', '#/molecular/calculator', 'Antibody dilution calculator']];
   return `<h1>Molecular</h1><nav class="subtabs" aria-label="Molecular sections">${t.map(([k, href, label]) => `<a href="${href}" ${k === current ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
 const molecularTabs = ihcTabs;
@@ -13964,6 +14827,273 @@ async function renderStudyReport(app, id, kind) {
 return { renderStudyReport };
 });
 
+__define('outsideviews', function () {
+// Outside IHC sources: the "Outside sources" section of an assay page (identifiers, links to the six sources, HPA data,
+// saved pages) and Molecular > Outside sources (what each source allows, importing the HPA and Antibody Registry
+// files, and reviewing suggested gene symbols and RRIDs in bulk). The rules are in core/outside.mjs.
+const { $, $$, api, esc, fmtDate, fmtDateTime, act, pageTop, options, toast, getMeta } = __require('ui');
+const { ihcTabs } = __require('ihcviews');
+const { SOURCES, OTHER_SOURCE, readTextChunks, lineSplitter, csvSplitter, hpaReader, registryReader } = __require('outside');
+const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
+const ext = (url, label) => (safeUrl(url) ? `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : esc(label));
+const useBadge = (use) => (use === 'import' ? '<span class="badge complete" title="Open data: its files can be imported">Import</span>' : '<span class="badge muted" title="Its terms allow linking, not copying">Link only</span>');
+const RELIABILITY = {
+  Enhanced: 'at least one antibody passed the HPA\'s enhanced validation (such as genetic or independent-antibody methods)',
+  Supported: 'the staining agrees with RNA data and what is published',
+  Approved: 'the staining partly agrees with RNA data or what is published',
+  Uncertain: 'the staining disagrees with RNA data or what is published, or little is known',
+};
+const relText = (r) => (r ? `<strong>${esc(r)}</strong>${RELIABILITY[r] ? ` <span class="small muted">(${esc(RELIABILITY[r])})</span>` : ''}` : '<span class="muted">Not given</span>');
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall back below */ }
+  const t = Object.assign(document.createElement('textarea'), { value: text });
+  t.style.cssText = 'position:fixed;left:-10000px;top:0'; document.body.appendChild(t); t.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  t.remove();
+  return ok;
+}
+
+// ---------- the section on an assay page ----------
+
+function assayOutsideHtml(a, o) {
+  const notRecorded = '<span class="muted">Not recorded</span>';
+  const suggest = (field, list) => list.map((c) => `<button class="chip" type="button" data-use="${field}" data-value="${esc(c.symbol || c.rrid)}" title="${esc(c.why)}">Use ${esc(c.symbol || c.rrid)}</button>
+    <span class="small muted">${esc(c.why)}${c.vendor && field === 'rrid' && !/^HPA antibody/.test(c.why) ? `: ${esc(c.vendor)} ${esc(c.catalog)}${c.clone ? `, clone ${esc(c.clone)}` : ''}${c.name ? ` (${esc(c.name)})` : ''}` : ''}</span>`).join('<br>');
+  const ids = o.single ? `
+    <dl class="dl wide">
+      <dt>Target gene</dt><dd>${o.target ? `<strong>${esc(o.target)}</strong>${o.target === 'N/A' ? ' <span class="small muted">(a tag or reagent: no gene)</span>' : ''}` : notRecorded}
+        ${o.targetNotInHpa ? '<br><span class="small muted">Not in the imported HPA data. Import proteinatlas.tsv again (Outside sources) to pick it up, or check the symbol.</span>' : ''}
+        ${o.targetSuggestions.length ? `<div class="small" style="margin-top:4px">${suggest('target', o.targetSuggestions)}</div>` : ''}</dd>
+      <dt>UniProt</dt><dd>${o.uniprot ? esc(o.uniprot) : notRecorded}${o.uniprotFromHpa ? `<div class="small" style="margin-top:4px"><button class="chip" type="button" data-use="uniprot" data-value="${esc(o.uniprotFromHpa)}">Use ${esc(o.uniprotFromHpa)}</button> <span class="muted">from the HPA (human protein)</span></div>` : ''}</dd>
+      <dt>RRID</dt><dd>${o.rrid ? (o.rrid === 'N/A' ? 'N/A <span class="small muted">(no RRID exists)</span>' : `${ext(`https://www.antibodyregistry.org/${o.rrid}`, `RRID:${o.rrid}`)} <span class="small muted">cite as “${esc(a.manufacturer || 'Vendor')} Cat# ${esc(String(a.catalog || '').replace(/\s*\([^)]*\)/g, '').trim())}, RRID:${esc(o.rrid)}”</span>`) : notRecorded}
+        ${o.rridSuggestions.length ? `<div class="small" style="margin-top:4px">${suggest('rrid', o.rridSuggestions)}</div>` : !o.rrid && !o.registryLoaded ? '<br><span class="small muted">Import the Antibody Registry list (Outside sources) to have RRIDs suggested, or look it up with the link opposite.</span>' : ''}</dd>
+    </dl>
+    <div class="actions" style="margin-top:10px"><button class="btn quiet small" type="button" id="ids-edit">Edit identifiers</button></div>
+    <form class="form" id="ids-form" hidden style="margin-top:12px">
+      <div class="field"><label for="i-target">Target gene (human symbol, e.g. MKI67)</label><input id="i-target" value="${esc(o.target)}" maxlength="20" autocomplete="off" placeholder="MKI67, PTPRC, CD8A"><span class="small muted">The mouse symbol (Mki67) works too. N/A for a tag or reagent.</span></div>
+      <div class="field"><label for="i-rrid">RRID</label><input id="i-rrid" value="${esc(o.rrid)}" maxlength="80" autocomplete="off" placeholder="AB_2722"><span class="small muted">AB_…, RRID:AB_…, or the registry address. N/A if none exists.</span></div>
+      <div class="field"><label for="i-uniprot">UniProt accession(s)</label><input id="i-uniprot" value="${esc(o.uniprot)}" maxlength="60" autocomplete="off" placeholder="P46013"></div>
+      <div class="field full actions" style="margin-top:0"><button class="btn small" type="submit">Save identifiers</button><button class="btn quiet small" type="button" id="ids-cancel">Cancel</button></div>
+    </form>`
+    : '<p class="small muted">This protocol uses several antibodies. Record the gene, RRID and UniProt on each single-stain protocol; pages about the panel can still be saved below.</p>';
+
+  const h = o.hpa;
+  const g = h?.gene; const tis = h?.tissue;
+  const hpa = h ? `
+    <div class="panel section">
+      <h3>Human Protein Atlas: ${esc(g?.gene || tis?.gene || '')}</h3>
+      ${h.notHuman ? '<p class="note" style="margin-top:0">This protocol is listed for non-human tissue. The HPA stains human tissue, so this shows where the human protein is found: a guide to control tissues, not evidence that this antibody works.</p>' : ''}
+      <dl class="dl wide">
+        ${g ? `${g.description ? `<dt>Protein</dt><dd>${esc(g.description)}</dd>` : ''}
+        <dt>IHC reliability</dt><dd>${relText(g.reliabilityIH)}</dd>
+        ${g.reliabilityIF ? `<dt>IF reliability</dt><dd>${relText(g.reliabilityIF)}</dd>` : ''}
+        ${g.evidence ? `<dt>Protein evidence</dt><dd>${esc(g.evidence)}</dd>` : ''}
+        ${g.tissueSpecificity ? `<dt>RNA in tissues</dt><dd>${esc(g.tissueSpecificity)}${g.tissueNtpm ? `<br><span class="small muted">${esc(g.tissueNtpm)}</span>` : ''}</dd>` : ''}
+        ${g.antibodies?.length ? `<dt>HPA antibodies</dt><dd class="small">${g.antibodies.map((x) => `${esc(x.id)}${x.rrid ? ` (${ext(`https://www.antibodyregistry.org/${x.rrid}`, `RRID:${x.rrid}`)})` : ''}`).join(', ')}</dd>` : ''}` : ''}
+        <dt>Normal tissue IHC</dt><dd class="small">${tis?.rows?.length ? ['High', 'Medium', 'Low'].map((lv) => { const r = tis.rows.filter((x) => x.level === lv); return r.length ? `<strong>${lv}:</strong> ${r.map((x) => esc(`${x.tissue} (${x.cell})`)).join('; ')}` : ''; }).filter(Boolean).join('<br>')
+          + (tis.reliability ? `<br><span class="muted">Reliability ${esc(tis.reliability)}</span>` : '') : tis ? 'Not detected in the tissues the HPA stained.' : o.hpaTissueLoaded ? '<span class="muted">Not in the imported normal tissue data.</span>' : '<span class="muted">Import normal_tissue.tsv (Outside sources) to see where it stains, as a guide to control tissue.</span>'}</dd>
+      </dl>
+      <p class="small muted" style="margin-bottom:0">Data from the Human Protein Atlas${h.version ? ` version ${esc(h.version)}` : ''}${h.tissueVersion && h.tissueVersion !== h.version ? ` (normal tissue data version ${esc(h.tissueVersion)})` : ''} (${ext('https://www.proteinatlas.org/', 'proteinatlas.org')}), used under ${esc(h.licence)}. Summarized; see the HPA for the images and full data.</p>
+    </div>` : '';
+
+  const linkRows = o.links.map((s) => `<tr>
+      <td><strong>${esc(s.name)}</strong> ${useBadge(s.use)}${s.caution ? `<br><span class="small muted">${esc(s.caution)}</span>` : ''}</td>
+      <td class="small">${s.links.map((l) => ext(l.url, l.label)).join('<br>')}
+        ${s.search ? `<div class="pair" style="margin-top:4px;display:flex;gap:6px;align-items:center"><span class="muted">Search for</span> <code>${esc(s.search)}</code> <button class="link" type="button" data-copy="${esc(s.search)}">Copy</button></div>` : ''}
+        ${s.saved.length ? `<div style="margin-top:4px">${s.saved.map((r) => `${ext(r.url, 'Saved page')}${r.note ? `: ${esc(r.note)}` : ''}`).join('<br>')}</div>` : ''}</td></tr>`).join('');
+
+  const srcOpts = [...SOURCES.map((s) => [s.key, s.name]), [OTHER_SOURCE.key, OTHER_SOURCE.name]];
+  const refs = o.refs.length ? `<table class="t"><tbody>${o.refs.slice().reverse().map((r) => {
+    const src = [...SOURCES, OTHER_SOURCE].find((s) => s.key === r.source);
+    return `<tr><td class="small">${esc(src?.name || r.source)}<br><span class="muted">${fmtDate(r.savedOn)} · ${esc(r.by)}</span></td>
+      <td class="small">${r.url ? ext(r.url, r.url.length > 70 ? `${r.url.slice(0, 69)}…` : r.url) : ''}${r.note ? `${r.url ? '<br>' : ''}${esc(r.note)}` : ''}</td>
+      <td class="n"><button class="link small" type="button" data-unref="${r.id}">Remove</button></td></tr>`;
+  }).join('')}</tbody></table>` : '<p class="small muted">None yet.</p>';
+
+  return `
+    <h2>Outside sources</h2>
+    <p class="small muted" style="max-width:920px">What others publish about this target and antibody. MHL's protocol above stays the record of how the stain is run; nothing here changes it. <a href="#/molecular/outside">What each source allows</a></p>
+    <div class="split even">
+      <div>
+        <h3>Identifiers</h3>
+        ${ids}
+        ${hpa}
+      </div>
+      <div>
+        <h3>Look it up</h3>
+        <table class="t"><tbody>${linkRows}</tbody></table>
+        <h3 class="section">Saved pages and notes</h3>
+        <p class="small muted">The page you found (a CiteAb product, a NordiQC recommended protocol, an Antibodypedia validation) and a short note in your own words. Antibodypedia and CiteAb do not allow copying their content, so summarize rather than paste.</p>
+        ${refs}
+        <form class="form" id="ref-form" style="margin-top:10px">
+          <div class="field"><label for="r-source">Source</label><select id="r-source">${options(srcOpts, 'citeab')}</select></div>
+          <div class="field"><label for="r-url">Page address</label><input id="r-url" maxlength="500" placeholder="https://…" autocomplete="off"></div>
+          <div class="field full"><label for="r-note">Note (400 characters)</label><textarea id="r-note" maxlength="400" placeholder="e.g. NordiQC run 63: clone SP7 optimal on BOND III with HIER pH 9"></textarea></div>
+          <div class="field full actions" style="margin-top:0"><button class="btn small" type="submit">Save page</button></div>
+        </form>
+      </div>
+    </div>`;
+}
+
+function wireAssayOutside(root, a, reload) {
+  const put = (body, msg) => act(null, async () => { await api('PUT', `/api/ihc/assays/${a.id}/identifiers`, body); await reload(); }, msg);
+  $$('[data-use]', root).forEach((b) => b.addEventListener('click', () => put({ [b.dataset.use]: b.dataset.value }, `${b.dataset.use === 'target' ? 'Target gene' : b.dataset.use === 'rrid' ? 'RRID' : 'UniProt'} saved`)));
+  $('#ids-edit', root)?.addEventListener('click', () => { $('#ids-form', root).hidden = false; $('#ids-edit', root).hidden = true; $('#i-target', root).focus(); });
+  $('#ids-cancel', root)?.addEventListener('click', () => { $('#ids-form', root).hidden = true; $('#ids-edit', root).hidden = false; });
+  $('#ids-form', root)?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    act(e.submitter, async () => {
+      const r = await api('PUT', `/api/ihc/assays/${a.id}/identifiers`, { target: $('#i-target', root).value, rrid: $('#i-rrid', root).value, uniprot: $('#i-uniprot', root).value });
+      await reload();
+      return r;
+    }, (r) => (r.changed ? 'Identifiers saved' : 'Nothing changed'));
+  });
+  $$('[data-copy]', root).forEach((b) => b.addEventListener('click', async () => { toast(await copyText(b.dataset.copy) ? `Copied “${b.dataset.copy}”` : 'The browser did not allow copying; select the text instead.', 'ok'); }));
+  $('#ref-form', root)?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    act(e.submitter, async () => {
+      await api('POST', `/api/ihc/assays/${a.id}/refs`, { source: $('#r-source', root).value, url: $('#r-url', root).value, note: $('#r-note', root).value });
+      await reload();
+    }, 'Page saved');
+  });
+  $$('[data-unref]', root).forEach((b) => b.addEventListener('click', () => {
+    if (!confirm('Remove this saved page from the assay?')) return;
+    act(b, async () => { await api('POST', `/api/ihc/assays/${a.id}/refs/${b.dataset.unref}/remove`, {}); await reload(); }, 'Removed');
+  }));
+}
+
+// ---------- Molecular > Outside sources ----------
+
+const view = { show: 'all', limit: 100 };
+
+async function renderOutside(app) {
+  const [meta, s] = await Promise.all([getMeta(), api('GET', '/api/ihc/outside')]);
+  const c = s.coverage;
+  const pct = (n) => (c.single ? Math.round((100 * n) / c.single) : 0);
+  const imp = (m, what) => (m ? `<p class="small">${esc(what)} <strong>${esc(m.file)}</strong>${m.version ? ` (version ${esc(m.version)})` : ''}, ${fmtDateTime(m.importedAt)} by ${esc(m.by)}: ${m.rows.toLocaleString('en-US')} rows read, ${m.count.toLocaleString('en-US')} kept.${m.capped ? ' <strong>More matched than the pilot keeps; the rest were left out.</strong>' : ''}${m.missing?.length ? `<br><span class="muted">Columns not in the file: ${esc(m.missing.join(', '))}.</span>` : ''}</p>` : '');
+  const rows = s.review.filter((r) => (view.show === 'target' ? r.targetSuggestion : view.show === 'rrid' ? r.rridSuggestion : true));
+  const shown = rows.slice(0, view.limit === 'all' ? rows.length : view.limit);
+  app.innerHTML = `
+    ${ihcTabs('outside', meta)}
+    <p style="max-width:920px">Each antibody in the catalog can be linked to six outside sources. Two publish open data, which can be imported here so the LIMS can suggest each antibody's gene and RRID and show HPA staining data beside the protocol. The other four allow links but not copying, so the LIMS links to them and staff can save the page they found with a short note. MHL's own protocols stay the record; outside data is shown beside them, never merged in.</p>
+
+    <h2 class="section">What each source allows</h2>
+    <table class="t"><thead><tr><th>Source</th><th>What it offers</th><th>In the LIMS</th><th>Access and terms</th></tr></thead>
+      <tbody>${s.sources.map((x) => `<tr><td><strong>${ext(x.home, x.name)}</strong></td><td class="small">${esc(x.what)}${x.caution ? `<br><span class="muted">${esc(x.caution)}</span>` : ''}</td>
+        <td>${useBadge(x.use)}</td><td class="small">${esc(x.access)}</td></tr>`).join('')}</tbody></table>
+    <p class="small muted">Checked November 2026. Terms change; the IHC team and the NIH Library should confirm before production (open questions 60 to 63).</p>
+
+    <h2 class="section">How much of the catalog is linked</h2>
+    <p>${c.single} of the ${c.active} active protocols use a single antibody. Of those, <strong>${c.withTarget}</strong> (${pct(c.withTarget)}%) have a target gene${c.targetNA ? ` and ${c.targetNA} are marked N/A (tags and reagents)` : ''}, and <strong>${c.withRrid}</strong> (${pct(c.withRrid)}%) have an RRID${c.rridNA ? ` (${c.rridNA} marked N/A)` : ''}. ${c.withRefs} protocols have saved pages. Imported data takes ${s.storedKb} KB.</p>
+
+    <div class="split even section">
+      <div class="panel">
+        <h2>Human Protein Atlas</h2>
+        ${s.hpa.summary || s.hpa.tissue ? `${imp(s.hpa.summary, 'Gene summary from')}${imp(s.hpa.tissue, 'Normal tissue IHC from')}<p class="small">${s.hpa.genes} genes in the summary, ${s.hpa.tissueGenes} with normal tissue staining${s.hpa.version ? `; HPA version ${esc(s.hpa.version)}` : ''}. Licence ${esc(s.hpa.licence)}: the version and licence are shown wherever the data appear.</p>` : '<p class="small">Nothing imported yet.</p>'}
+        <ol class="small">
+          <li>On ${ext('https://www.proteinatlas.org/about/download', 'proteinatlas.org/about/download')}, download <strong>proteinatlas.tsv.zip</strong> (one row per gene) and <strong>normal_tissue.tsv.zip</strong> (IHC staining by tissue and cell type). Free; no sign-in.</li>
+          <li>Type the HPA version (on the HPA home page), then choose the gene summary first and the normal tissue file second. The .zip can be chosen as it is.</li>
+          <li>The file is read on this computer and only the genes the catalog may need are kept (about ${s.wants.symbols.length.toLocaleString('en-US')} names and symbols to look for).</li>
+        </ol>
+        <div class="form" style="margin-top:8px">
+          <div class="field"><label for="hpa-version">HPA version</label><input id="hpa-version" value="${esc(s.hpa.version)}" maxlength="20" placeholder="e.g. 26.0"></div>
+          <div class="field"><label for="hpa-file">HPA file</label><input type="file" id="hpa-file" accept=".tsv,.zip,.gz,.txt,text/tab-separated-values"></div>
+        </div>
+        <p class="small muted" id="hpa-msg" aria-live="polite"></p>
+        ${s.hpa.summary || s.hpa.tissue ? '<button class="btn quiet small" type="button" data-clear="hpa">Remove the HPA data</button>' : ''}
+      </div>
+      <div class="panel">
+        <h2>Antibody Registry (RRIDs)</h2>
+        ${s.registry.import ? `${imp(s.registry.import, 'Imported')}<p class="small">${s.registry.rows} registry rows match catalog numbers in the catalog.</p>` : '<p class="small">Nothing imported yet.</p>'}
+        <ol class="small">
+          <li>Sign in (free) at ${ext('https://www.antibodyregistry.org/', 'antibodyregistry.org')} and download the list of antibodies (CSV). It has millions of rows.</li>
+          <li>Choose it here. Only rows whose catalog number matches one of the catalog's ${s.wants.catalogs.length} single catalog numbers are kept.</li>
+          <li>RRIDs are then suggested on each assay and below, matched on catalog number and vendor. Accept them after a look: catalog numbers are reused.</li>
+        </ol>
+        <div class="field" style="max-width:420px"><label for="reg-file">Registry file</label><input type="file" id="reg-file" accept=".csv,.tsv,.zip,.gz,.txt,text/csv"></div>
+        <p class="small muted" id="reg-msg" aria-live="polite"></p>
+        ${s.registry.import ? '<button class="btn quiet small" type="button" data-clear="registry">Remove the registry data</button>' : ''}
+      </div>
+    </div>
+
+    <h2 class="section">Suggestions to review</h2>
+    <p class="small muted" style="max-width:920px">Gene symbols come from common IHC names and, once imported, the HPA's symbols and synonyms; RRIDs from the registry rows and the HPA's own antibodies. Nothing is filled in until you accept it, and accepting fills only empty fields.</p>
+    ${s.review.length ? `
+    <div class="row">
+      <div class="filters" role="group" aria-label="Show">${[['all', `All (${s.review.length})`], ['target', `Gene symbols (${s.review.filter((r) => r.targetSuggestion).length})`], ['rrid', `RRIDs (${s.review.filter((r) => r.rridSuggestion).length})`]].map(([k, l]) => `<button type="button" data-show="${k}" aria-pressed="${view.show === k}">${esc(l)}</button>`).join('')}</div>
+      <span class="spacer"></span>
+      <button class="btn quiet small" type="button" id="tick-strong" title="Gene symbols that are the whole name in the HPA, common IHC names, HPA synonyms of one gene only, tags; RRIDs with the same catalog number and vendor">Tick the strong ones shown</button>
+      <button class="btn small" type="button" id="accept">Accept ticked</button>
+    </div>
+    <table class="t" style="margin-top:8px"><thead><tr><th class="n">#</th><th>Antibody</th><th>Catalog number</th><th>Target gene</th><th>RRID</th></tr></thead>
+      <tbody>${shown.map((r) => `<tr>
+        <td class="n muted">${r.id}</td><td><a href="#/molecular/assay/${r.id}">${esc(r.name)}</a></td>
+        <td class="small">${esc(r.catalog)}<br><span class="muted">${esc(r.manufacturer)}</span></td>
+        <td class="small">${r.targetSuggestion && view.show !== 'rrid' ? `<label><input type="checkbox" data-acc="${r.id}" data-field="target" data-value="${esc(r.targetSuggestion.symbol)}" data-strong="${r.targetSuggestion.strength >= 2}"> <strong>${esc(r.targetSuggestion.symbol)}</strong></label><br><span class="muted">${esc(r.targetSuggestion.why)}</span>` : r.target ? esc(r.target) : ''}</td>
+        <td class="small">${r.rridSuggestion && view.show !== 'target' ? `<label><input type="checkbox" data-acc="${r.id}" data-field="rrid" data-value="${esc(r.rridSuggestion.rrid)}" data-strong="${r.rridSuggestion.level === 'exact'}"> <strong>${esc(r.rridSuggestion.rrid)}</strong></label> ${ext(`https://www.antibodyregistry.org/${r.rridSuggestion.rrid}`, 'check')}<br><span class="muted">${esc(r.rridSuggestion.why)}${r.rridSuggestion.vendor && !/^HPA antibody/.test(r.rridSuggestion.why) ? `: ${esc(r.rridSuggestion.vendor)} ${esc(r.rridSuggestion.catalog)}` : ''}</span>` : r.rrid ? esc(r.rrid) : ''}</td>
+      </tr>`).join('')}</tbody></table>
+    ${rows.length > shown.length ? `<p class="small muted">Showing ${shown.length} of ${rows.length}. <button class="link" type="button" id="all">Show all</button></p>` : ''}`
+    : '<p class="empty">No suggestions waiting. Import the HPA or registry files above for more.</p>'}`;
+  pageTop(app);
+
+  const redraw = () => renderOutside(app);
+  $$('[data-show]', app).forEach((b) => b.addEventListener('click', () => { view.show = b.dataset.show; view.limit = 100; redraw(); }));
+  $('#all')?.addEventListener('click', () => { view.limit = 'all'; redraw(); });
+  $('#tick-strong')?.addEventListener('click', () => { $$('[data-acc]', app).forEach((x) => { if (x.dataset.strong === 'true') x.checked = true; }); });
+  $('#accept')?.addEventListener('click', (e) => {
+    const items = $$('[data-acc]', app).filter((x) => x.checked).map((x) => ({ assayId: Number(x.dataset.acc), field: x.dataset.field, value: x.dataset.value }));
+    if (!items.length) { toast('Tick the suggestions to accept first.', 'error'); return; }
+    act(e.currentTarget, async () => { const r = await api('POST', '/api/ihc/outside/accept', { items }); await redraw(); return r; },
+      (r) => `${r.accepted} accepted${r.skipped.length ? `; ${r.skipped.length} skipped (already filled in or not valid)` : ''}`);
+  });
+  $$('[data-clear]', app).forEach((b) => b.addEventListener('click', () => {
+    if (!confirm(`Remove the imported ${b.dataset.clear === 'hpa' ? 'Human Protein Atlas' : 'Antibody Registry'} data? Identifiers already saved on assays stay.`)) return;
+    act(b, async () => { await api('POST', '/api/ihc/outside/clear', { which: b.dataset.clear }); await redraw(); }, 'Removed');
+  }));
+
+  // Reading a file of hundreds of megabytes in pieces; only the matching rows go to the LIMS.
+  const progress = (box) => { let next = 5e6; return (n) => { if (n >= next) { box.textContent = `Reading… ${Math.round(n / 1e6)} million characters so far`; next += 5e6; } }; };
+  $('#hpa-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const msg = $('#hpa-msg'); msg.textContent = 'Reading the file…';
+    const res = await act(null, async () => {
+      const reader = hpaReader({ wanted: s.wants.symbols, wantedTissue: s.wants.tissueSymbols, wantedAntibodies: s.wants.antibodies });
+      const lines = lineSplitter((l) => reader.line(l));
+      const tick = progress(msg); let n = 0;
+      await readTextChunks(f, (chunk) => { lines.push(chunk); n += chunk.length; tick(n); });
+      lines.end();
+      const out = reader.result();
+      msg.textContent = `Read ${out.rows.toLocaleString('en-US')} rows; saving ${(out.genes || out.tissue).length} genes…`;
+      const r = await api('POST', '/api/ihc/outside/hpa', { ...out, version: $('#hpa-version').value, file: f.name });
+      await redraw();
+      return r;
+    }, (r) => `HPA ${r.kind === 'summary' ? 'gene summary' : 'normal tissue data'} imported: ${r.kept} genes kept`);
+    if (!res && msg.isConnected) { msg.textContent = ''; e.target.value = ''; }
+  });
+  $('#reg-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const msg = $('#reg-msg'); msg.textContent = 'Reading the file…';
+    const res = await act(null, async () => {
+      const reader = registryReader({ catalogs: s.wants.catalogs });
+      const csv = csvSplitter((row) => reader.row(row), 'auto');
+      const tick = progress(msg); let n = 0;
+      await readTextChunks(f, (chunk) => { csv.push(chunk); n += chunk.length; tick(n); }, { entry: /\.(csv|tsv|txt)$/i });
+      csv.end();
+      const out = reader.result();
+      msg.textContent = `Read ${out.rows.toLocaleString('en-US')} rows; saving ${out.kept.length}…`;
+      const r = await api('POST', '/api/ihc/outside/registry', { ...out, file: f.name });
+      await redraw();
+      return r;
+    }, (r) => `Antibody Registry imported: ${r.kept} rows match the catalog`);
+    if (!res && msg.isConnected) { msg.textContent = ''; e.target.value = ''; }
+  });
+}
+
+return { assayOutsideHtml, wireAssayOutside, renderOutside };
+});
+
 __define('app', function () {
 // MHL LIMS pilot: router and app shell.
 const { $, $$, getMeta, esc, refreshWho } = __require('ui');
@@ -13979,6 +15109,7 @@ const { renderIhcHome, renderIhcRequest, renderIhcReview } = __require('ihcviews
 const { renderXenium, renderXeniumRun } = __require('xeniumviews');
 const { renderStudyReport } = __require('studyreports');
 const { renderAssays, renderAssay, renderAssayEdit } = __require('assays');
+const { renderOutside } = __require('outsideviews');
 const { renderCalculator } = __require('calculator');
 const { renderWsi, renderWsiImage } = __require('wsiviews');
 const { renderTracking } = __require('tracking');
@@ -14032,6 +15163,7 @@ async function route() {
       if (parts[1] === 'calculator') return await renderCalculator(app, params);
       if (parts[1] === 'new') { location.replace('#/new'); return undefined; }   // new requests are made under New request
       if (parts[1] === 'assays') return await renderAssays(app, params);
+      if (parts[1] === 'outside') return await renderOutside(app);
       if (parts[1] === 'assay' && parts[2] === 'new') return await renderAssayEdit(app, null);
       if (parts[1] === 'assay' && parts[3] === 'edit') return await renderAssayEdit(app, Number(parts[2]));
       if (parts[1] === 'assay') return await renderAssay(app, Number(parts[2]));
@@ -14083,7 +15215,12 @@ const IHC_CATALOG = {"name":"MHL IHC assay database","source":"MHL IHC database.
   try { storage = window.localStorage; stored = storage.getItem(KEY); } catch (e) { storage = null; }
   const fresh = () => seedState({ priceList: PRICE_LIST, ihcCatalog: IHC_CATALOG, today: clock.today() });
   const state = stored ? JSON.parse(stored) : fresh();
-  const save = (s) => { try { if (storage) storage.setItem(KEY, JSON.stringify(s)); } catch (e) { console.warn('Could not save pilot data', e); } };
+  let warned = false;
+  // If the browser's storage is full, say so once: otherwise every later change would be lost on reload without a word.
+  const save = (s) => { try { if (storage) storage.setItem(KEY, JSON.stringify(s)); } catch (e) {
+    console.warn('Could not save pilot data', e);
+    if (!warned) { warned = true; setTimeout(() => { try { __require('ui').toast('This browser could not save the pilot data (its storage is full). Changes will be lost when the page is closed. In Settings, download a backup, then remove imported outside data or reset the pilot.', 'error'); } catch (x) { alert('This browser could not save the pilot data (its storage is full).'); } }, 0); }
+  } };
   if (!stored) save(state);
   window.MHL_LOCAL = createCore({ state, priceList: PRICE_LIST, ihcCatalog: IHC_CATALOG, clock, save, reseed: fresh });
   __require('app');

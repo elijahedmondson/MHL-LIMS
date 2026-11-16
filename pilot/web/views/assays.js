@@ -2,6 +2,7 @@
 // catalog as an Excel workbook.
 import { $, $$, api, esc, fmtDate, fmtDateTime, getMeta, act, pageTop, options, navigate, kindBadge, saveFile } from '../ui.js';
 import { ihcTabs } from './ihcviews.js';
+import { assayOutsideHtml, wireAssayOutside } from './outsideviews.js';
 import { classify, applyDetection, speciesTags as readSpecies, fixativeTags as readFixatives, catalogSheets } from '../lib/ihc.mjs';
 import { writeXlsx, XLSX_TYPE } from '../lib/xlsxwrite.mjs';
 
@@ -86,6 +87,7 @@ export async function renderAssays(app, params) {
   if (!f.q) $('#q').focus();
 }
 
+const HISTORY_WORDS = { ASSAY_IDS: 'identifiers', ASSAY_REF_ADDED: 'page saved', ASSAY_REF_REMOVED: 'page removed' };
 // Clone, host and isotype as shown in lists (see antibodyInfo in core/ihc.mjs).
 const abText = (ab) => (!ab ? '' : ab.several ? 'Several antibodies' : [ab.clone ? `Clone ${ab.clone}` : ab.cloneNotApplicable ? 'Clone N/A' : '',
   [ab.host && ab.host !== 'Not applicable' ? ab.host : '', ab.clonality && ab.clonality !== 'Not applicable' ? ab.clonality.toLowerCase() : ''].filter(Boolean).join(' '),
@@ -146,11 +148,13 @@ export async function renderAssay(app, id) {
         <h2 class="section">Requested in</h2>
         ${d.usedIn.length ? `<table class="t"><tbody>${d.usedIn.map((u) => `<tr><td><a class="idtxt" href="#/molecular/request/${u.id}">${esc(u.number)}</a></td><td>${esc(u.investigator)}</td><td>${fmtDate(u.submittedOn)}</td><td>${esc(u.status)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Not requested in the pilot yet.</p>'}
         <h2 class="section">Changes</h2>
-        ${d.history.length ? `<table class="t"><tbody>${d.history.map((h) => `<tr><td>${fmtDateTime(h.at)}</td><td>${esc(h.by)}</td><td>${esc(h.action.replace(/^ASSAY_/, '').toLowerCase())}<br><span class="small muted">${esc(h.detail)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes since it was imported.</p>'}
+        ${d.history.length ? `<table class="t"><tbody>${d.history.map((h) => `<tr><td>${fmtDateTime(h.at)}</td><td>${esc(h.by)}</td><td>${esc(HISTORY_WORDS[h.action] || h.action.replace(/^ASSAY_/, '').toLowerCase())}<br><span class="small muted">${esc(h.detail)}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No changes since it was imported.</p>'}
       </div>
-    </div>`;
+    </div>
+    <div class="section" id="outside">${assayOutsideHtml(a, d.outside)}</div>`;
   pageTop(app);
   const reload = () => renderAssay(app, id);
+  wireAssayOutside($('#outside'), a, async () => { const y = window.scrollY; await reload(); window.scrollTo(0, y); });
   $('#check')?.addEventListener('click', (e) => act(e.currentTarget, async () => { await api('POST', `/api/ihc/assays/${a.id}/check`, {}); await getMeta(true); await reload(); }, 'Marked as checked'));
   $('#retire')?.addEventListener('click', (e) => {
     const reason = prompt(`Retire ${a.name} (#${a.id})? It stays in the catalog but can no longer be requested. Reason:`, '');

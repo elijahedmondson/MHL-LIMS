@@ -134,7 +134,7 @@ test('saved data from version 3 upgrades: protocols split, studies and necropsie
   for (const n of Object.values(old.necropsies)) { delete n.necropsyProtocolId; delete n.trimProtocolId; }
   old.version = 3;
   const core = createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 8);   // versions 5 (slide imaging), 6 (estimates), 7 and 8 run after it
+  assert.equal(old.version, 9);   // versions 5 (slide imaging), 6 (estimates), 7, 8 and 9 run after it
   const zap = old.studies.find((s) => s.zap === 'ZAP2231');
   assert.equal(zap.necropsyProtocolId, 3); assert.equal(zap.trimProtocolId, 3);
   const study = core.handle('GET', `/api/studies/${zap.id}`).json;

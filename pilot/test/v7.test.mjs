@@ -256,7 +256,7 @@ test('saved data from version 6 upgrades: NAS requests open, Xenium runs, study 
   for (const s of old.studies) delete s.reportNotes;
   for (const w of old.ihcRequests) { delete w.workStatus; delete w.assignedTo; }
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 8);
+  assert.equal(old.version, 9);
   assert.deepEqual(old.xenium, { runs: [] });
   // A NAS request whose requests are all complete has served its purpose and is closed; the rest stay open.
   const done = (n) => { const reqs = old.requests.filter((r) => r.nasId === n.id); return reqs.length > 0 && reqs.every((r) => r.status === 'Complete'); };

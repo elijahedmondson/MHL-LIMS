@@ -73,6 +73,7 @@ const STATIC = {
   '/lib/xenium.mjs': path.join(here, 'core', 'xenium.mjs'),
   '/lib/animallist.mjs': path.join(here, 'core', 'animallist.mjs'),
   '/lib/xlsxwrite.mjs': path.join(here, 'core', 'xlsxwrite.mjs'),
+  '/lib/outside.mjs': path.join(here, 'core', 'outside.mjs'),
 };
 const WEB = path.join(here, 'web');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };

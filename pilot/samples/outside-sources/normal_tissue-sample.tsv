@@ -1,0 +1,25 @@
+Gene	Gene name	Tissue	Cell type	Level	Reliability
+ENSG00000148773	MKI67	lymph node	germinal center cells	High	Enhanced
+ENSG00000148773	MKI67	tonsil	germinal center cells	High	Enhanced
+ENSG00000148773	MKI67	colon	glandular cells	Medium	Enhanced
+ENSG00000148773	MKI67	skin	basal layer keratinocytes	Low	Enhanced
+ENSG00000148773	MKI67	liver	hepatocytes	Not detected	Enhanced
+ENSG00000081237	PTPRC	spleen	cells in red pulp	High	Enhanced
+ENSG00000081237	PTPRC	spleen	cells in white pulp	High	Enhanced
+ENSG00000081237	PTPRC	lymph node	non-germinal center cells	High	Enhanced
+ENSG00000081237	PTPRC	lung	macrophages	Medium	Enhanced
+ENSG00000081237	PTPRC	liver	hepatocytes	Not detected	Enhanced
+ENSG00000153563	CD8A	lymph node	non-germinal center cells	High	Enhanced
+ENSG00000153563	CD8A	spleen	cells in white pulp	Medium	Enhanced
+ENSG00000153563	CD8A	tonsil	non-germinal center cells	High	Enhanced
+ENSG00000174837	ADGRE1	bone marrow	hematopoietic cells	Medium	Approved
+ENSG00000174837	ADGRE1	lung	macrophages	Low	Approved
+ENSG00000039068	CDH1	colon	glandular cells	High	Enhanced
+ENSG00000039068	CDH1	breast	glandular cells	High	Enhanced
+ENSG00000039068	CDH1	skin	squamous epithelial cells	Medium	Enhanced
+ENSG00000039068	CDH1	heart muscle	cardiomyocytes	Not detected	Enhanced
+ENSG00000136872	ALDOB	liver	hepatocytes	High	Enhanced
+ENSG00000136872	ALDOB	kidney	cells in tubules	High	Enhanced
+ENSG00000136872	ALDOB	small intestine	glandular cells	Medium	Enhanced
+ENSG00000155657	TTN	heart muscle	cardiomyocytes	High	Supported
+ENSG00000155657	TTN	skeletal muscle	myocytes	High	Supported

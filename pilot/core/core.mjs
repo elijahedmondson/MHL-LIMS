@@ -18,6 +18,7 @@ import * as ESTX from './estimates.mjs';
 import * as MAIL from './estimatemail.mjs';
 import * as XEN from './xenium.mjs';
 import * as ANIMALS from './animallist.mjs';
+import * as OUT from './outside.mjs';
 import { describe, sig, fisherExact } from './stats.mjs';
 import { AREAS, AREA_ORDER, TERMINAL_AREAS, REQUEST_TYPES, SPECIES, DICTIONARIES, NECROPSY_EXTRAS, PERFUSION_CODES, PATHOLOGISTS } from './defs.mjs';
 
@@ -33,7 +34,7 @@ export function addDays(iso, days) {
 
 export function emptyState(today) {
   return {
-    version: 8,
+    version: 9,
     createdOn: today,
     settings: { initials: '', pricingFrom: '2026-01-01', instrumentFolders: { chemistry: '', hematology: '' } },
     counters: {},
@@ -47,10 +48,24 @@ export function emptyState(today) {
     wsi: newWsi(),
     estimates: [],
     xenium: { runs: [] },
+    outside: newOutside(),
   };
 }
 
+// Data imported from outside IHC sources: the HPA download files and the Antibody Registry rows that match the catalog.
+export const newOutside = () => ({ hpa: { version: '', summary: null, tissue: null, genes: {}, tissueByGene: {} }, registry: { import: null, rows: [] } });
+
 const newWsi = () => ({ scanners: WSIX.SCANNERS.map((s) => ({ ...s, status: 'Available', folder: '', serials: [], notes: '' })), images: [], runs: [] });
+
+// Data saved before version 9: assays gain their links to outside sources (the target's gene symbol, UniProt accession
+// and RRID, all empty, and no saved pages), and there is room for imported HPA and Antibody Registry data.
+export function upgradeToV9(state) {
+  if (state.version >= 9 && state.outside) return false;
+  for (const a of state.assays || []) { a.target ??= ''; a.uniprot ??= ''; a.rrid ??= ''; a.refs ??= []; }
+  state.outside ||= newOutside();
+  state.version = 9;
+  return true;
+}
 
 // Data saved before version 8: assays gain the fields the IHC team asked for (clone, host, clonality, platform and
 // chromogen set by hand, public or not, preferred, whether it works), and their kind, platform and chromogen are worked
@@ -130,7 +145,8 @@ export function loadAssays(ihcCatalog) {
       name: '', dilution: '', retrieval: '', digestion: '', kit: '', fixative: '', species: '', control: '', manufacturer: '', catalog: '',
       kind: 'IHC', plex: 1, chromogen: 'DAB', platform: 'Manual', speciesTags: [], fixTags: [], status: 'Active', list: null, sourceLine: null,
       flags: [], repairs: {}, doubleStain: null, components: null, partOf: [], duplicateOf: null, notes: '', updatedAt: null,
-      clone: '', host: '', clonality: '', platformSet: '', chromogenSet: '', visibility: 'Public', preferred: false, result: '', ...a,
+      clone: '', host: '', clonality: '', platformSet: '', chromogenSet: '', visibility: 'Public', preferred: false, result: '',
+      target: '', uniprot: '', rrid: '', refs: [], ...a,
     };
     if (!x.components) {
       const d = IHC.applyDetection(IHC.classify(x), x);
@@ -176,6 +192,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
   if (upgradeToV6(state)) commit();
   if (upgradeToV7(state)) commit();
   if (upgradeToV8(state)) commit();
+  if (upgradeToV9(state)) commit();
 
   function audit(action, entity, entityId, detail = '', who = null) {
     state.audit.push({ id: nextId(), at: clock.now(), by: who || by(), action, entity, entityId, detail });
@@ -379,7 +396,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     hits.sort((a, b) => b.received.localeCompare(a.received) || b.number.localeCompare(a.number));
     // Antibodies in the IHC catalog, so "CD8" or "ab101500" finds the assay too.
     const q = raw.toLowerCase();
-    const found = /^[\d-]+[a-z]?$/i.test(raw) && raw.length > 5 ? [] : state.assays.filter((a) => a.status === 'Active' && (a.name.toLowerCase().includes(q) || a.catalog.toLowerCase().includes(q)));
+    const found = /^[\d-]+[a-z]?$/i.test(raw) && raw.length > 5 ? [] : state.assays.filter((a) => a.status === 'Active' && (a.name.toLowerCase().includes(q) || a.catalog.toLowerCase().includes(q) || (a.target || '').toLowerCase() === q || (a.rrid || '').toLowerCase() === q.replace(/^rrid:\s*/, '')));
     found.sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)) || a.name.localeCompare(b.name));
     return { hits: hits.slice(0, 50), assays: { count: found.length, top: found.slice(0, 6).map((a) => ({ id: a.id, name: a.name, kind: IHC.kindLabel(a), species: a.species, catalog: a.catalog })) } };
   }
@@ -1539,6 +1556,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       ...assaySummary(a), digestion: a.digestion, notes: a.notes, updatedAt: a.updatedAt, sourceLine: a.sourceLine,
       clone: a.clone || '', host: a.host || '', clonality: a.clonality || '', cloneShown: ab.several ? 'Several antibodies' : ab.cloneNotApplicable ? 'N/A' : ab.clone,
       hostShown: ab.host, clonalityShown: ab.clonality, isotype: ab.isotype, platformSet: a.platformSet || '', chromogenSet: a.chromogenSet || '',
+      target: a.target || '', uniprot: a.uniprot || '', rrid: a.rrid || '', refCount: (a.refs || []).length,
     };
   }
 
@@ -1555,7 +1573,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       && (!query.vis || (a.visibility || 'Public') === query.vis)
       && (query.pref !== '1' || a.preferred)
       && (query.result === undefined || query.result === '' || (query.result === 'none' ? !a.result : a.result === query.result))
-      && words.every((w) => (/^#\d+$/.test(w) ? a.id === Number(w.slice(1)) : `${a.name} ${a.catalog} ${a.manufacturer} ${a.kit} ${a.clone || ''} ${a.host || ''}`.toLowerCase().includes(w))));
+      && words.every((w) => (/^#\d+$/.test(w) ? a.id === Number(w.slice(1)) : `${a.name} ${a.catalog} ${a.manufacturer} ${a.kit} ${a.clone || ''} ${a.host || ''} ${a.target || ''} ${a.rrid || ''}`.toLowerCase().includes(w.replace(/^rrid:/, '')))));
     const q = words.join(' ');
     const qre = new RegExp(`^${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^0-9]|$)`);
     // In a search, preferred protocols come first among equally good matches, and ones marked "Did not work" last.
@@ -1606,6 +1624,7 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       duplicateOf: a.duplicateOf ? assaySummary(assayById(a.duplicateOf)) : null,
       sameName: state.assays.filter((x) => x.id !== a.id && x.name.toLowerCase() === a.name.toLowerCase()).map((x) => assaySummary(x)),
       usedIn, history: state.audit.filter((x) => x.entity === 'assay' && x.entityId === a.id).slice(-30).reverse(),
+      outside: outsideOf(a),
     };
   }
 
@@ -1698,6 +1717,204 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
       commit();
       return { ok: true };
     };
+  }
+
+  // ---------- outside IHC sources ----------
+  // Links from each assay to the HPA, the Antibody Registry, Antibodypedia, CiteAb, NordiQC and ImmunoQuery; the assay's
+  // own identifiers (target gene, UniProt, RRID) that make the links exact; pages staff saved; and the HPA and registry
+  // data imported from their download files (see core/outside.mjs for what each source allows).
+  const hpaGenes = () => state.outside.hpa.genes;
+  const hpaLoaded = () => Object.keys(state.outside.hpa.genes).length > 0;
+  // Built once per import (the objects are replaced on import, and on rollback).
+  let synCache = { of: null, idx: null }; let regCache = { of: null, idx: null };
+  const synonymIndex = () => (synCache.of === state.outside.hpa.genes ? synCache.idx : (synCache = { of: state.outside.hpa.genes, idx: OUT.buildSynonymIndex(state.outside.hpa.genes) }).idx);
+  const registryIdx = () => (regCache.of === state.outside.registry.rows ? regCache.idx : (regCache = { of: state.outside.registry.rows, idx: OUT.registryIndex(state.outside.registry.rows) }).idx);
+  const hpaGeneOf = (a) => (OUT.hasGene(a) ? hpaGenes()[OUT.geneKey(a.target)] || null : null);
+  const targetSuggestions = (a) => (a.target ? [] : OUT.targetCandidates(a, hpaLoaded() ? hpaGenes() : null, hpaLoaded() ? synonymIndex() : null));
+  const rridSuggestions = (a) => (a.rrid ? [] : OUT.rridCandidates(a, registryIdx(), hpaGenes()));
+  const importMeta = (m) => (m ? { file: m.file, version: m.version || '', rows: m.rows, count: m.count, importedAt: m.importedAt, by: m.by, capped: !!m.capped, missing: m.missing || [] } : null);
+
+  function outsideOf(a) {
+    const g = hpaGeneOf(a);
+    const tissue = OUT.hasGene(a) ? state.outside.hpa.tissueByGene[OUT.geneKey(a.target)] || null : null;
+    return {
+      single: OUT.singleAntibody(a), target: a.target || '', uniprot: a.uniprot || '', rrid: a.rrid || '', refs: a.refs || [],
+      links: OUT.sourceLinks(a, { hpaGene: g }),
+      hpa: g || tissue ? { gene: g, tissue, version: state.outside.hpa.summary?.version ?? state.outside.hpa.version, tissueVersion: state.outside.hpa.tissue?.version || '', licence: OUT.HPA_LICENCE,
+        notHuman: !a.speciesTags.some((t) => t === 'Human' || t === 'Human xenograft' || t === 'Humanized mouse') } : null,
+      hpaLoaded: hpaLoaded(), hpaTissueLoaded: !!state.outside.hpa.tissue, registryLoaded: !!state.outside.registry.import,
+      targetSuggestions: targetSuggestions(a), rridSuggestions: rridSuggestions(a),
+      targetNotInHpa: OUT.hasGene(a) && hpaLoaded() && !g,
+      uniprotFromHpa: !a.uniprot && g?.uniprot?.length ? g.uniprot.join(', ') : '',
+    };
+  }
+
+  const ID_FIELDS = [['target', 'Target gene', OUT.readGene], ['uniprot', 'UniProt', OUT.readUniprot], ['rrid', 'RRID', OUT.readRrid]];
+  function setIdentifiers(a, body, note = '') {
+    const changed = [];
+    for (const [k, label, read] of ID_FIELDS) {
+      if (body[k] === undefined) continue;
+      const r = read(text(body[k], 200));
+      if (r.error) fail(`${label}: ${r.error}`);
+      // A panel's antibodies each have their own gene and RRID, on their single-stain protocols (clearing is allowed).
+      if (r.value && !OUT.singleAntibody(a)) fail(`${a.name} uses several antibodies; record the ${label.toLowerCase()} on each single-stain protocol.`);
+      if (r.value !== (a[k] || '')) { changed.push(`${label}: ${a[k] || '(blank)'} → ${r.value || '(blank)'}`); a[k] = r.value; }
+    }
+    if (changed.length) { a.updatedAt = clock.now(); audit('ASSAY_IDS', 'assay', a.id, `${changed.join('; ')}${note}`); }
+    return changed.length;
+  }
+  function saveIdentifiers({ params, body }) {
+    const a = getAssay(params[0]);
+    const n = setIdentifiers(a, body);
+    if (n) commit();
+    return { id: a.id, changed: n };
+  }
+
+  function addReference({ params, body }) {
+    const a = getAssay(params[0]);
+    const r = OUT.readReference(body);
+    if (r.error) fail(r.error);
+    a.refs ||= [];
+    if (r.value.url && a.refs.some((x) => x.url === r.value.url)) fail('That page is already saved on this assay.');
+    if (a.refs.length >= 30) fail('An assay can keep 30 saved pages; remove one first.');
+    const ref = { id: nextId(), ...r.value, savedOn: clock.today(), by: by() };
+    a.refs.push(ref);
+    a.updatedAt = clock.now();
+    audit('ASSAY_REF_ADDED', 'assay', a.id, `${OUT.sourceByKey(ref.source).name}: ${ref.url || ref.note.slice(0, 80)}`);
+    commit();
+    return { id: ref.id };
+  }
+  function removeReference({ params }) {
+    const a = getAssay(params[0]);
+    const i = (a.refs || []).findIndex((x) => x.id === Number(params[1]));
+    if (i < 0) throw new HttpError(404, 'Saved page not found.');
+    const [ref] = a.refs.splice(i, 1);
+    a.updatedAt = clock.now();
+    audit('ASSAY_REF_REMOVED', 'assay', a.id, `${OUT.sourceByKey(ref.source)?.name || ref.source}: ${ref.url || ref.note.slice(0, 80)}`);
+    commit();
+    return { ok: true };
+  }
+
+  // Molecular > Outside sources: what each source allows, what has been imported, how much of the catalog is linked, and
+  // the suggestions to review in bulk.
+  function outsideSummary() {
+    const live = state.assays.filter((a) => a.status === 'Active');
+    const single = live.filter(OUT.singleAntibody);
+    const review = [];
+    for (const a of single) {
+      const t = targetSuggestions(a)[0] || null; const r = rridSuggestions(a)[0] || null;
+      if (t || r) review.push({ id: a.id, name: a.name, catalog: a.catalog, manufacturer: a.manufacturer, target: a.target || '', rrid: a.rrid || '', targetSuggestion: t, rridSuggestion: r });
+    }
+    const h = state.outside.hpa;
+    return {
+      sources: OUT.SOURCES.map(({ key, name, home, use, access, what, caution }) => ({ key, name, home, use, access, what, caution: caution || '' })),
+      hpa: { version: h.version, summary: importMeta(h.summary), tissue: importMeta(h.tissue), genes: Object.keys(h.genes).length, tissueGenes: Object.keys(h.tissueByGene).length, licence: OUT.HPA_LICENCE },
+      registry: { import: importMeta(state.outside.registry.import), rows: state.outside.registry.rows.length },
+      coverage: { active: live.length, single: single.length, withTarget: single.filter((a) => OUT.hasGene(a)).length, targetNA: single.filter((a) => a.target === 'N/A').length,
+        withRrid: single.filter(OUT.hasRrid).length, rridNA: single.filter((a) => a.rrid === 'N/A').length, withRefs: live.filter((a) => (a.refs || []).length).length },
+      wants: OUT.importWants(state.assays, h.genes),
+      review: review.sort((x, y) => x.name.localeCompare(y.name, 'en', { sensitivity: 'base' }) || x.id - y.id),
+      storedKb: Math.round(JSON.stringify(state.outside).length / 1024),
+    };
+  }
+
+  // Imported data comes from the browser: only strings and numbers are kept, without control characters.
+  const cleanText = (v, max) => (typeof v === 'string' || typeof v === 'number' ? text(v, max).replace(/[\u0000-\u001f]/g, ' ') : '');
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  // The standalone keeps everything in the browser's storage (about 5 million characters); outside data may use 2 million.
+  const OUTSIDE_BUDGET = 2_000_000;
+  const checkBudget = () => {
+    const n = JSON.stringify(state.outside).length;
+    if (n > OUTSIDE_BUDGET) fail(`That would make the imported outside data ${Math.round(n / 1000).toLocaleString('en-US')} thousand characters, more than the pilot can keep (${(OUTSIDE_BUDGET / 1000).toLocaleString('en-US')} thousand). Remove the other import first, or import fewer genes.`);
+  };
+  const strList = (v, n, max) => (Array.isArray(v) ? v.slice(0, n).map((x) => cleanText(x, max)).filter(Boolean) : []);
+  function importHpa({ body }) {
+    const kind = body.kind;
+    if (kind !== 'summary' && kind !== 'tissue') fail('Choose proteinatlas.tsv or normal_tissue.tsv from the HPA downloads.');
+    const list = kind === 'summary' ? body.genes : body.tissue;
+    if (!Array.isArray(list)) fail('Nothing was read from the file.');
+    const cap = kind === 'summary' ? 1500 : 600;
+    if (list.length > cap) fail(`More than ${cap.toLocaleString('en-US')} genes were read; the import keeps only genes the catalog needs. Reload the page and try again.`);
+    if (!list.every(isObj)) fail('The file was not read correctly; is this an HPA file?');
+    const sym = (v) => { const g = cleanText(v, 30); if (!/^[A-Za-z0-9][A-Za-z0-9\-.@]{0,29}$/.test(g)) fail(`"${g}" is not a gene symbol; is this an HPA file?`); return g; };
+    const ensg = (v) => { const e = cleanText(v, 20); return /^ENSG\d{11}$/.test(e) ? e : ''; };
+    const version = cleanText(body.version, 20);
+    const meta = { file: cleanText(body.file, 120) || 'HPA file', version, rows: Math.max(0, Number(body.rows) || 0), count: list.length, importedAt: clock.now(), by: by(), capped: !!body.capped, missing: strList(body.missing, 20, 40) };
+    const h = state.outside.hpa;
+    if (kind === 'summary' || !h.version) h.version = version;
+    if (kind === 'summary') {
+      const genes = {};
+      for (const g of list) {
+        const gene = sym(g.gene);
+        genes[OUT.geneKey(gene)] = {
+          gene, ensembl: ensg(g.ensembl), synonyms: strList(g.synonyms, 15, 40), description: cleanText(g.description, 160),
+          uniprot: strList(g.uniprot, 3, 12).filter((x) => !OUT.readUniprot(x).error), evidence: cleanText(g.evidence, 60),
+          reliabilityIH: cleanText(g.reliabilityIH, 30), reliabilityIF: cleanText(g.reliabilityIF, 30),
+          antibodies: (Array.isArray(g.antibodies) ? g.antibodies.slice(0, 12) : []).filter(isObj).map((x) => ({ id: cleanText(x.id, 12), rrid: /^AB_\d{1,10}$/.test(x?.rrid || '') ? x.rrid : '' })).filter((x) => /^[A-Za-z]{2,5}\d{4,7}$/.test(x.id)),
+          tissueSpecificity: cleanText(g.tissueSpecificity, 60), tissueNtpm: cleanText(g.tissueNtpm, 200),
+        };
+      }
+      h.genes = genes; h.summary = meta;
+    } else {
+      const byGene = {};
+      for (const t of list) {
+        const gene = sym(t.gene);
+        byGene[OUT.geneKey(gene)] = { gene, ensembl: ensg(t.ensembl), reliability: cleanText(t.reliability, 30),
+          rows: (Array.isArray(t.rows) ? t.rows.slice(0, 16) : []).filter(isObj).map((r) => ({ tissue: cleanText(r.tissue, 60), cell: cleanText(r.cell, 60), level: ['High', 'Medium', 'Low'].includes(r.level) ? r.level : '' })).filter((r) => r.level && r.tissue) };
+      }
+      h.tissueByGene = byGene; h.tissue = meta;
+    }
+    checkBudget();
+    audit('OUTSIDE_IMPORTED', 'outside', null, `Human Protein Atlas ${kind === 'summary' ? 'gene summary' : 'normal tissue IHC'}${h.version ? ` v${h.version}` : ''} from ${meta.file}: ${list.length} genes kept of ${meta.rows} rows`);
+    commit();
+    return { kind, kept: list.length };
+  }
+
+  function importRegistry({ body }) {
+    const list = body.kept;
+    if (!Array.isArray(list)) fail('Nothing was read from the file.');
+    if (list.length > 3000) fail('More than 3,000 rows were kept; that is not what the catalog needs.');
+    if (!list.every(isObj)) fail('The file was not read correctly; is this the Antibody Registry download?');
+    const rows = list.map((r) => {
+      const rrid = OUT.readRrid(cleanText(r?.rrid, 40));
+      if (rrid.error || !rrid.value || rrid.value === 'N/A') fail(`"${cleanText(r?.rrid, 40)}" is not an antibody RRID; is this the Antibody Registry download?`);
+      return { rrid: rrid.value, catalog: cleanText(r.catalog, 40), vendor: cleanText(r.vendor, 80), name: cleanText(r.name, 120), target: cleanText(r.target, 60), clone: cleanText(r.clone, 40) };
+    }).filter((r) => r.catalog);
+    state.outside.registry = { rows, import: { file: cleanText(body.file, 120) || 'registry file', rows: Math.max(0, Number(body.rows) || 0), count: rows.length, importedAt: clock.now(), by: by(), capped: !!body.capped, missing: [] } };
+    checkBudget();
+    audit('OUTSIDE_IMPORTED', 'outside', null, `Antibody Registry from ${state.outside.registry.import.file}: ${rows.length} rows kept of ${state.outside.registry.import.rows}`);
+    commit();
+    return { kept: rows.length };
+  }
+
+  function clearOutside({ body }) {
+    if (body.which === 'hpa') state.outside.hpa = newOutside().hpa;
+    else if (body.which === 'registry') state.outside.registry = newOutside().registry;
+    else fail('Say which imported data to remove: hpa or registry.');
+    audit('OUTSIDE_CLEARED', 'outside', null, body.which === 'hpa' ? 'Human Protein Atlas data removed' : 'Antibody Registry data removed');
+    commit();
+    return { ok: true };
+  }
+
+  // Accepting suggestions from the review list: each fills an empty field only; a field someone has filled is left alone.
+  function acceptSuggestions({ body }) {
+    const items = Array.isArray(body.items) ? body.items.slice(0, 2000) : [];
+    if (!items.length) fail('Tick the suggestions to accept.');
+    let accepted = 0; const skipped = [];
+    const byAssay = new Map();
+    for (const it of items) {
+      const a = assayById(it?.assayId);
+      const field = ID_FIELDS.find(([k]) => k === it?.field);
+      if (!a || !field) { skipped.push(`#${it?.assayId}: not found`); continue; }
+      if (!OUT.singleAntibody(a)) { skipped.push(`#${a.id} ${a.name}: uses several antibodies`); continue; }
+      if (a[field[0]]) { skipped.push(`#${a.id} ${a.name}: ${field[1]} is already ${a[field[0]]}`); continue; }
+      const r = field[2](text(it.value, 200));
+      if (r.error || !r.value) { skipped.push(`#${a.id} ${a.name}: ${r.error || 'no value'}`); continue; }
+      const b = byAssay.get(a) || {}; b[field[0]] = r.value; byAssay.set(a, b);
+    }
+    for (const [a, b] of byAssay) accepted += setIdentifiers(a, b, ' (accepted from the outside sources review)');
+    if (accepted) commit();
+    return { accepted, skipped };
   }
 
   // ---------- IHC requests from the web form ----------
@@ -3741,6 +3958,14 @@ export function createCore({ state, priceList, ihcCatalog = null, clock, save = 
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/check$/, confirmAssay],
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/retire$/, setAssayStatus('Retired')],
     ['POST', /^\/api\/ihc\/assays\/(\d+)\/restore$/, setAssayStatus('Active')],
+    ['PUT', /^\/api\/ihc\/assays\/(\d+)\/identifiers$/, saveIdentifiers],
+    ['POST', /^\/api\/ihc\/assays\/(\d+)\/refs$/, addReference],
+    ['POST', /^\/api\/ihc\/assays\/(\d+)\/refs\/(\d+)\/remove$/, removeReference],
+    ['GET', /^\/api\/ihc\/outside$/, outsideSummary],
+    ['POST', /^\/api\/ihc\/outside\/hpa$/, importHpa],
+    ['POST', /^\/api\/ihc\/outside\/registry$/, importRegistry],
+    ['POST', /^\/api\/ihc\/outside\/clear$/, clearOutside],
+    ['POST', /^\/api\/ihc\/outside\/accept$/, acceptSuggestions],
     ['GET', /^\/api\/ihc\/requests$/, listIhc],
     ['POST', /^\/api\/ihc\/requests$/, submitIhc],
     ['POST', /^\/api\/ihc\/estimate$/, estimateDraft],

@@ -384,7 +384,7 @@ export const CATALOG_COLUMNS = [
   ['#', 'id', 7], ['Antibody', 'name', 28], ['Antibody clone', 'cloneShown', 14], ['Antibody host', 'hostShown', 13], ['Clonality', 'clonalityShown', 13],
   ['Kind', 'kindLabel', 16], ['Platform', 'platform', 12], ['Chromogen', 'chromogen', 12], ['Dilution and time', 'dilution', 22], ['Antigen retrieval', 'retrieval', 30],
   ['Proteolytic digestion', 'digestion', 18], ['Secondary antibody / detection kit', 'kit', 40], ['Fixative', 'fixative', 16], ['Species', 'species', 18],
-  ['Control tissue', 'control', 24], ['Manufacturer', 'manufacturer', 20], ['Catalog number', 'catalog', 20], ['Public', 'publicText', 10], ['Preferred', 'preferredText', 10],
+  ['Control tissue', 'control', 24], ['Manufacturer', 'manufacturer', 20], ['Catalog number', 'catalog', 20], ['Target gene', 'target', 12], ['RRID', 'rrid', 14], ['Public', 'publicText', 10], ['Preferred', 'preferredText', 10],
   ['Result', 'resultLabel', 15], ['Status', 'status', 10], ['Needs checking', 'checkText', 14], ['Notes', 'notes', 40], ['Last changed', 'changed', 12], ['Export line', 'sourceLine', 10],
 ];
 export function catalogSheets(assays, { filtered = false, today = '', source = '' } = {}) {
@@ -401,6 +401,7 @@ export function catalogSheets(assays, { filtered = false, today = '', source = '
       [{ v: 'Column', style: 'header' }, { v: 'Meaning', style: 'header' }],
       ['Antibody clone, host, clonality', 'As entered on the assay; where nobody has entered them, as read from the antibody name and catalog number. N/A = not applicable.'],
       ['Kind, platform, chromogen', 'Worked out from the detection kit and dilution unless set by hand on the assay.'],
+      ['Target gene, RRID', 'The target\'s gene symbol and the antibody\'s RRID (Antibody Registry), as entered or accepted on the assay page. N/A = not applicable.'],
       ['Public', 'Public: investigators can request it. Not public: MHL staff only.'],
       ['Preferred', 'The protocol to use first when there are several for the same target.'],
       ['Result', 'Works, Being optimized, Did not work, or not recorded.'],

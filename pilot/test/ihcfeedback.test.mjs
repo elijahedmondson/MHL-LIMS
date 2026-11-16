@@ -239,7 +239,7 @@ test('saved data from version 7 upgrades: assays get the new fields, and nothing
   old.version = 7;
   const fields = old.assays.map((a) => IHC.ASSAY_FIELDS.map(([k]) => a[k]).join('|'));
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 8);
+  assert.equal(old.version, 9);   // version 9 (outside sources) runs after it
   assert.ok(old.assays.every((a) => a.visibility === 'Public' && a.preferred === false && a.result === '' && a.clone === '' && a.platformSet === ''));
   assert.deepEqual(old.assays.map((a) => IHC.ASSAY_FIELDS.map(([k]) => a[k]).join('|')), fields);
   assert.equal(upgradeToV8(old), false);

@@ -200,7 +200,7 @@ test('saved data from version 4 gets whole-slide imaging', () => {
   const old = structuredClone(state);
   delete old.wsi; old.version = 4;
   createCore({ state: old, priceList, ihcCatalog, clock: { today: () => TODAY, now: () => `${TODAY}T10:00:00` } });
-  assert.equal(old.version, 8);   // versions 6 (estimates), 7 and 8 run after it
+  assert.equal(old.version, 9);   // versions 6 (estimates), 7, 8 and 9 run after it
   assert.deepEqual(old.wsi.scanners.map((s) => s.id), ['AT2', 'GT450', 'FL', 'PHENOHT']);
   assert.equal(upgradeToV5(old), false);
 });
